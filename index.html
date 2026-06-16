@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>황성준 변호사 채널 콘텐츠 워크벤치</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="주요 메뉴">
+        <div class="brand">
+          <div class="brand-mark">ㅎ</div>
+          <div>
+            <strong>콘텐츠 워크벤치</strong>
+            <span>황성준 변호사 채널</span>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-item active" data-view="dashboard" type="button">
+            <i data-lucide="layout-dashboard"></i>
+            <span>대시보드</span>
+          </button>
+          <button class="nav-item" data-view="sources" type="button">
+            <i data-lucide="rss"></i>
+            <span>원문·RSS</span>
+          </button>
+          <button class="nav-item" data-view="lawyer" type="button">
+            <i data-lucide="file-pen-line"></i>
+            <span>원석 입력</span>
+          </button>
+          <button class="nav-item" data-view="output" type="button">
+            <i data-lucide="sparkles"></i>
+            <span>콘텐츠화</span>
+          </button>
+          <button class="nav-item" data-view="guardrails" type="button">
+            <i data-lucide="shield-check"></i>
+            <span>가드레일</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="micro-label">이번 달 목표</div>
+          <div class="target-strip">
+            <span><strong id="targetSources">0</strong>/50 원문</span>
+            <span><strong id="targetCandidates">0</strong>/15 후보</span>
+            <span><strong id="targetPriority">0</strong>/5 우선</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="viewEyebrow">월간 운영</p>
+            <h1 id="viewTitle">콘텐츠 소재 대시보드</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" id="exportCsvBtn" type="button" title="후보 CSV 내보내기" aria-label="후보 CSV 내보내기">
+              <i data-lucide="table"></i>
+              <span>CSV</span>
+            </button>
+            <button class="icon-button" id="exportJsonBtn" type="button" title="JSON 백업" aria-label="JSON 백업">
+              <i data-lucide="download"></i>
+              <span>JSON</span>
+            </button>
+            <label class="icon-button file-button" title="JSON 복원">
+              <i data-lucide="upload"></i>
+              <span>복원</span>
+              <input id="importJsonInput" type="file" accept="application/json" />
+            </label>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboardView" data-title="콘텐츠 소재 대시보드" data-eyebrow="월간 운영">
+          <div class="metric-grid">
+            <article class="metric-card">
+              <span>원문 수집</span>
+              <strong id="metricSources">0</strong>
+              <small>월 목표 50개</small>
+            </article>
+            <article class="metric-card">
+              <span>1차 후보</span>
+              <strong id="metricCandidates">0</strong>
+              <small>총점 9점 이상</small>
+            </article>
+            <article class="metric-card">
+              <span>우선 제작</span>
+              <strong id="metricPriority">0</strong>
+              <small>총점 12점 이상</small>
+            </article>
+            <article class="metric-card danger">
+              <span>검수 대기</span>
+              <strong id="metricReview">0</strong>
+              <small>변호사 확인 필요</small>
+            </article>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>월간 운영 흐름</h2>
+                <span id="currentWeekBadge" class="badge">Week 1</span>
+              </div>
+              <div class="timeline" id="monthlyTimeline"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>시리즈 분포</h2>
+              </div>
+              <div class="series-chart" id="seriesChart"></div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>우선 제작 후보</h2>
+              <button class="ghost-button" id="goOutputBtn" type="button">
+                <i data-lucide="arrow-right"></i>
+                <span>콘텐츠화</span>
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>순위</th>
+                    <th>소재 제목</th>
+                    <th>장면 한 줄</th>
+                    <th>시리즈</th>
+                    <th>법률 쟁점</th>
+                    <th>점수</th>
+                    <th>검수</th>
+                  </tr>
+                </thead>
+                <tbody id="priorityTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="sourcesView" data-title="원문·RSS 관리" data-eyebrow="수집과 필터링">
+          <div class="split-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>원문 등록</h2>
+              </div>
+              <form id="sourceForm" class="stack-form">
+                <div class="form-grid">
+                  <label>
+                    <span>출처 유형</span>
+                    <select name="source_type">
+                      <option value="news">뉴스</option>
+                      <option value="blog">블로그</option>
+                      <option value="court">판례·공공</option>
+                      <option value="public">공공자료</option>
+                      <option value="lawyer_input">변호사 원석</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>출처명</span>
+                    <input name="source_name" placeholder="출처명" />
+                  </label>
+                </div>
+                <label>
+                  <span>원문 제목</span>
+                  <input name="title" required placeholder="원문 제목" />
+                </label>
+                <label>
+                  <span>원문 URL</span>
+                  <input name="url" placeholder="https://..." />
+                </label>
+                <div class="form-grid">
+                  <label>
+                    <span>발행일</span>
+                    <input name="published_at" type="date" />
+                  </label>
+                  <label>
+                    <span>리스크</span>
+                    <select name="risk_level">
+                      <option value="low">low</option>
+                      <option value="medium">medium</option>
+                      <option value="high">high</option>
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  <span>요약</span>
+                  <textarea name="raw_summary" rows="4" required placeholder="사건 장면, 관계, 돈·명의·계정·상표 쟁점"></textarea>
+                </label>
+                <label>
+                  <span>본문</span>
+                  <textarea name="full_text" rows="5" placeholder="가능하면 원문 본문"></textarea>
+                </label>
+                <div class="form-actions">
+                  <button class="primary-button" type="submit">
+                    <i data-lucide="plus"></i>
+                    <span>저장</span>
+                  </button>
+                  <button class="ghost-button" id="fillSampleBtn" type="button">
+                    <i data-lucide="wand-sparkles"></i>
+                    <span>예시</span>
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>RSS URL</h2>
+              </div>
+              <form id="feedForm" class="inline-form">
+                <input id="feedNameInput" placeholder="출처명" />
+                <input id="feedUrlInput" placeholder="RSS URL" />
+                <button class="icon-only" type="submit" title="RSS URL 추가" aria-label="RSS URL 추가">
+                  <i data-lucide="plus"></i>
+                </button>
+              </form>
+              <div class="feed-list" id="feedList"></div>
+
+              <div class="panel-heading lower-heading">
+                <h2>일괄 입력</h2>
+                <button class="ghost-button" id="parseFeedBtn" type="button">
+                  <i data-lucide="scan-text"></i>
+                  <span>분석</span>
+                </button>
+              </div>
+              <textarea id="feedPasteInput" class="bulk-box" rows="8" placeholder="RSS XML 또는 JSON"></textarea>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-heading table-heading">
+              <h2>수집 원문</h2>
+              <div class="filter-row">
+                <input id="sourceSearch" class="search-input" placeholder="검색" />
+                <select id="sourceStatusFilter">
+                  <option value="all">전체</option>
+                  <option value="candidate">1차 후보</option>
+                  <option value="priority">우선 제작</option>
+                  <option value="review">검수 필요</option>
+                </select>
+              </div>
+            </div>
+            <div class="source-list" id="sourceList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="lawyerView" data-title="변호사님 원석 입력" data-eyebrow="실무 글감">
+          <div class="split-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>월간 질문지</h2>
+              </div>
+              <ol class="question-list" id="questionList"></ol>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>답변 저장</h2>
+              </div>
+              <form id="lawyerForm" class="stack-form">
+                <label>
+                  <span>일자</span>
+                  <input name="date" type="date" required />
+                </label>
+                <label>
+                  <span>원문</span>
+                  <textarea name="raw_note" rows="5" required placeholder="상담에서 반복된 말, 장면, 질문"></textarea>
+                </label>
+                <label>
+                  <span>상황 요약</span>
+                  <input name="situation" placeholder="예: 동업자가 정산자료를 공개하지 않음" />
+                </label>
+                <div class="form-grid">
+                  <label>
+                    <span>위험 문장</span>
+                    <input name="dangerous_sentence" placeholder="예: 너 나 못 믿냐?" />
+                  </label>
+                  <label>
+                    <span>의뢰인 감정</span>
+                    <select name="client_emotion">
+                      <option value="억울함">억울함</option>
+                      <option value="배신감">배신감</option>
+                      <option value="불안">불안</option>
+                      <option value="분노">분노</option>
+                      <option value="혼란">혼란</option>
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  <span>법률 쟁점</span>
+                  <input name="legal_issue" placeholder="정산금 청구, 동업관계 입증" />
+                </label>
+                <label>
+                  <span>준비자료</span>
+                  <input name="required_documents" placeholder="계약서, 카톡, 입금내역" />
+                </label>
+                <label>
+                  <span>콘텐츠 각도</span>
+                  <select name="content_angle">
+                    <option value="이거 소송감인가요?">이거 소송감인가요?</option>
+                    <option value="변호사가 보면 위험한 말">변호사가 보면 위험한 말</option>
+                    <option value="사장님들의 이별">사장님들의 이별</option>
+                    <option value="변호사가 대신 읽어드립니다">변호사가 대신 읽어드립니다</option>
+                    <option value="사업판 인간극장">사업판 인간극장</option>
+                  </select>
+                </label>
+                <label class="check-line">
+                  <input name="needs_anonymization" type="checkbox" checked />
+                  <span>비식별 처리 필요</span>
+                </label>
+                <button class="primary-button" type="submit">
+                  <i data-lucide="save"></i>
+                  <span>저장</span>
+                </button>
+              </form>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>저장된 원석</h2>
+            </div>
+            <div class="lawyer-list" id="lawyerList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="outputView" data-title="콘텐츠화" data-eyebrow="워싱과 검수">
+          <div class="split-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>소재 결합</h2>
+              </div>
+              <div class="stack-form">
+                <label>
+                  <span>RSS·원문 소재</span>
+                  <select id="sourceSelect"></select>
+                </label>
+                <label>
+                  <span>변호사님 원석</span>
+                  <select id="lawyerSelect"></select>
+                </label>
+                <button class="primary-button" id="generateIdeaBtn" type="button">
+                  <i data-lucide="sparkles"></i>
+                  <span>생성</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>검수 상태</h2>
+              </div>
+              <div class="review-board">
+                <div>
+                  <span>초안</span>
+                  <strong id="draftCount">0</strong>
+                </div>
+                <div>
+                  <span>검수 요청</span>
+                  <strong id="reviewCount">0</strong>
+                </div>
+                <div>
+                  <span>승인</span>
+                  <strong id="approvedCount">0</strong>
+                </div>
+              </div>
+              <p class="risk-callout">최종 콘텐츠는 항상 변호사 검수를 거칩니다.</p>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>생성 결과</h2>
+              <div class="form-actions">
+                <button class="ghost-button" id="copyIdeaBtn" type="button">
+                  <i data-lucide="copy"></i>
+                  <span>복사</span>
+                </button>
+                <button class="primary-button" id="saveIdeaBtn" type="button">
+                  <i data-lucide="save"></i>
+                  <span>저장</span>
+                </button>
+              </div>
+            </div>
+            <pre class="json-preview" id="ideaPreview"></pre>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>콘텐츠 후보</h2>
+            </div>
+            <div class="idea-list" id="ideaList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="guardrailsView" data-title="가드레일" data-eyebrow="법률·광고 리스크">
+          <div class="guard-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>금지 표현</h2>
+              </div>
+              <div class="phrase-list blocked" id="blockedPhrases"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>권장 표현</h2>
+              </div>
+              <div class="phrase-list allowed" id="allowedPhrases"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>비식별 체크</h2>
+              </div>
+              <div class="checklist" id="privacyChecklist"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>카테고리 키워드</h2>
+              </div>
+              <div class="keyword-cloud" id="keywordCloud"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
