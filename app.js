@@ -170,6 +170,19 @@
     영업비밀: ["퇴사 자료", "접근 기록", "고객명단 관리 기록"],
   };
 
+  const AUTO_DEFAULT_KEYWORDS = [
+    "동업 정산",
+    "동업자 통장",
+    "사업자 명의 동업",
+    "공동창업자 갈등",
+    "상표권 분쟁 공동 브랜드",
+    "공동계정 비밀번호",
+    "지인 투자금 반환",
+    "가족 간 금전거래",
+    "거래처 빼가기",
+    "정산금 청구 판례",
+  ];
+
   const els = {};
   let state = loadState();
   let currentIdea = null;
@@ -178,6 +191,7 @@
 
   function init() {
     bindElements();
+    initAutoCollectorDefaults();
     bindEvents();
     renderAll();
   }
@@ -204,6 +218,14 @@
       "feedList",
       "feedPasteInput",
       "parseFeedBtn",
+      "autoCollectBtn",
+      "autoSourceNews",
+      "autoSourceBlog",
+      "autoSourceCommunity",
+      "autoSourceLegal",
+      "autoLimitInput",
+      "autoKeywordInput",
+      "autoCollectStatus",
       "sourceSearch",
       "sourceStatusFilter",
       "sourceList",
@@ -235,6 +257,12 @@
     });
   }
 
+  function initAutoCollectorDefaults() {
+    if (els.autoKeywordInput && !els.autoKeywordInput.value.trim()) {
+      els.autoKeywordInput.value = AUTO_DEFAULT_KEYWORDS.join("\n");
+    }
+  }
+
   function bindEvents() {
     document.querySelectorAll(".nav-item").forEach((button) => {
       button.addEventListener("click", () => switchView(button.dataset.view));
@@ -244,6 +272,7 @@
     els.fillSampleBtn.addEventListener("click", fillSourceSample);
     els.feedForm.addEventListener("submit", onFeedSubmit);
     els.parseFeedBtn.addEventListener("click", onParseFeed);
+    els.autoCollectBtn.addEventListener("click", onAutoCollect);
     els.sourceSearch.addEventListener("input", renderSources);
     els.sourceStatusFilter.addEventListener("change", renderSources);
     els.sourceList.addEventListener("click", onSourceAction);
@@ -715,6 +744,251 @@
     } catch (error) {
       toast(error.message || "일괄 입력을 분석하지 못했습니다.");
     }
+  }
+
+  async function onAutoCollect() {
+    const selectedTypes = getSelectedAutoTypes();
+    const keywords = getAutoKeywords();
+    const maxItems = clamp(Number(els.autoLimitInput.value) || 30, 5, 80);
+
+    if (!selectedTypes.length) {
+      updateAutoStatus("수집 대상을 하나 이상 선택하세요.", "error");
+      return;
+    }
+    if (!keywords.length) {
+      updateAutoStatus("검색 키워드를 입력하세요.", "error");
+      return;
+    }
+
+    const jobs = buildAutoSearchJobs(selectedTypes, keywords);
+    const typeQuota = Object.fromEntries(
+      selectedTypes.map((type) => [type, Math.ceil(maxItems / selectedTypes.length)]),
+    );
+    const addedByType = {};
+    let added = 0;
+    let scanned = 0;
+    let failed = 0;
+
+    els.autoCollectBtn.disabled = true;
+    updateAutoStatus(`자동 수집 시작: 검색 ${jobs.length}개`, "running");
+
+    for (let i = 0; i < jobs.length && added < maxItems; i += 1) {
+      const job = jobs[i];
+      const typeKey = jobTypeKey(job);
+      if ((addedByType[typeKey] || 0) >= typeQuota[typeKey]) continue;
+      updateAutoStatus(
+        `${i + 1}/${jobs.length} ${job.label} 검색 중 · 저장 ${added}/${maxItems}`,
+        "running",
+      );
+      try {
+        const items = await fetchAutoSearchItems(job);
+        scanned += items.length;
+        for (const item of items) {
+          if (added >= maxItems) break;
+          if ((addedByType[typeKey] || 0) >= typeQuota[typeKey]) break;
+          if (addSource(enrichSource(item))) {
+            added += 1;
+            addedByType[typeKey] = (addedByType[typeKey] || 0) + 1;
+          }
+        }
+      } catch (error) {
+        failed += 1;
+      }
+    }
+
+    els.autoCollectBtn.disabled = false;
+    renderAll();
+    updateAutoStatus(
+      `완료: ${scanned}개 검색 결과 확인, 새 소재 ${added}개 저장${failed ? `, 실패 ${failed}개` : ""}`,
+      failed && !added ? "error" : "",
+    );
+    toast(`자동 수집 완료: ${added}개 저장`);
+  }
+
+  function getSelectedAutoTypes() {
+    const types = [];
+    if (els.autoSourceNews.checked) types.push("news");
+    if (els.autoSourceBlog.checked) types.push("blog");
+    if (els.autoSourceCommunity.checked) types.push("community");
+    if (els.autoSourceLegal.checked) types.push("legal");
+    return types;
+  }
+
+  function getAutoKeywords() {
+    return unique(
+      String(els.autoKeywordInput.value || "")
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ).slice(0, 12);
+  }
+
+  function updateAutoStatus(message, mode = "") {
+    els.autoCollectStatus.textContent = message;
+    els.autoCollectStatus.classList.toggle("running", mode === "running");
+    els.autoCollectStatus.classList.toggle("error", mode === "error");
+  }
+
+  function buildAutoSearchJobs(types, keywords) {
+    const jobs = [];
+    keywords.forEach((keyword) => {
+      if (types.includes("news")) {
+        jobs.push({
+          label: "뉴스",
+          collect_type: "news",
+          source_type: "news",
+          source_name: "Google News",
+          query: keyword,
+          risk_level: "low",
+          url: googleNewsRss(keyword),
+        });
+        jobs.push({
+          label: "뉴스",
+          collect_type: "news",
+          source_type: "news",
+          source_name: "Bing News",
+          query: keyword,
+          risk_level: "low",
+          url: bingNewsRss(keyword),
+        });
+      }
+      if (types.includes("blog")) {
+        jobs.push({
+          label: "블로그·웹",
+          collect_type: "blog",
+          source_type: "blog",
+          source_name: "Bing Web",
+          query: `${keyword} 사례 블로그`,
+          risk_level: "medium",
+          url: bingWebRss(`${keyword} 사례 블로그`),
+        });
+      }
+      if (types.includes("community")) {
+        ["clien.net", "82cook.com", "dcinside.com", "theqoo.net"].forEach((site) => {
+          jobs.push({
+            label: "커뮤니티",
+            collect_type: "community",
+            source_type: "community",
+            source_name: `Bing Community · ${site}`,
+            query: `site:${site} ${keyword}`,
+            risk_level: "high",
+            url: bingWebRss(`site:${site} ${keyword}`),
+          });
+        });
+      }
+      if (types.includes("legal")) {
+        [
+          { site: "law.go.kr", name: "국가법령정보센터" },
+          { site: "scourt.go.kr", name: "대한민국 법원" },
+          { site: "casenote.kr", name: "CaseNote" },
+        ].forEach((target) => {
+          jobs.push({
+            label: "판례·법률",
+            collect_type: "legal",
+            source_type: "court",
+            source_name: `Bing Legal · ${target.name}`,
+            query: `site:${target.site} ${keyword} 판례`,
+            risk_level: "low",
+            url: bingWebRss(`site:${target.site} ${keyword} 판례`),
+          });
+        });
+      }
+    });
+    return jobs;
+  }
+
+  function jobTypeKey(job) {
+    return job.collect_type || (job.source_type === "court" ? "legal" : job.source_type);
+  }
+
+  function googleNewsRss(query) {
+    return `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=ko&gl=KR&ceid=KR:ko`;
+  }
+
+  function bingNewsRss(query) {
+    return `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss&cc=KR`;
+  }
+
+  function bingWebRss(query) {
+    return `https://www.bing.com/search?q=${encodeURIComponent(query)}&format=rss`;
+  }
+
+  async function fetchAutoSearchItems(job) {
+    const attempts = [
+      { kind: "rss2json", url: `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(job.url)}` },
+      { kind: "feed2json", url: `https://feed2json.org/convert?url=${encodeURIComponent(job.url)}` },
+      { kind: "rss", url: job.url },
+    ];
+
+    let lastError = null;
+    for (const attempt of attempts) {
+      try {
+        const response = await fetch(attempt.url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        const items = parseAutoSearchResponse(text, attempt.kind, job);
+        if (items.length) return items;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error("검색 결과를 가져오지 못했습니다.");
+  }
+
+  function parseAutoSearchResponse(text, kind, job) {
+    if (kind === "rss2json") {
+      const data = JSON.parse(text);
+      if (data.status && data.status !== "ok") return [];
+      return (data.items || []).map((item) => mapAutoItem({
+        title: item.title,
+        link: item.link,
+        pubDate: item.pubDate,
+        summary: item.description || item.content,
+      }, job));
+    }
+    if (kind === "feed2json") {
+      const data = JSON.parse(text);
+      return (data.items || []).map((item) => mapAutoItem({
+        title: item.title,
+        link: item.url || item.external_url,
+        pubDate: item.date_published || item.date_modified,
+        summary: item.summary || item.content_text || item.content_html,
+      }, job));
+    }
+    return parseAutoRssXml(text, job);
+  }
+
+  function parseAutoRssXml(text, job) {
+    const xml = new DOMParser().parseFromString(text, "application/xml");
+    if (xml.querySelector("parsererror")) return [];
+    const nodes = [...xml.querySelectorAll("item")];
+    const entries = nodes.length ? nodes : [...xml.querySelectorAll("entry")];
+    return entries.map((node) => mapAutoItem({
+      title: nodeText(node, ["title"]),
+      link: nodeLink(node),
+      pubDate: nodeText(node, ["pubDate", "published", "updated"]),
+      summary: nodeText(node, ["description", "summary", "content"]),
+    }, job));
+  }
+
+  function mapAutoItem(item, job) {
+    const title = cleanHtml(item.title || "").trim();
+    const summary = cleanHtml(item.summary || "").trim();
+    const published = item.pubDate ? toDateInput(new Date(item.pubDate)) : toDateInput(new Date());
+    return {
+      id: makeId("src"),
+      source_name: job.source_name,
+      source_type: job.source_type,
+      url: item.link || job.url,
+      title: title || job.query,
+      published_at: published,
+      collected_at: nowStamp(),
+      raw_summary: summary || `자동 웹 검색어: ${job.query}`,
+      full_text: "",
+      risk_level: job.risk_level,
+      collection_method: "auto_web_search",
+      search_query: job.query,
+    };
   }
 
   function onSourceAction(event) {
