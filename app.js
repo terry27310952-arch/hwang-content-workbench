@@ -751,7 +751,9 @@
     if (!currentIdea && sortedSources.length) {
       currentIdea = createContentPackage(sortedSources[0], findBestLawyerInput(sortedSources[0]), false);
     }
-    els.ideaPreview.textContent = currentIdea ? JSON.stringify(currentIdea, null, 2) : "{}";
+    els.ideaPreview.innerHTML = currentIdea
+      ? renderIdeaBrief(currentIdea)
+      : `<div class="empty">생성할 소재를 선택하세요.</div>`;
 
     const counts = {
       draft: state.ideas.filter((idea) => idea.status === "draft").length,
@@ -798,6 +800,100 @@
         )
         .join("") || `<div class="empty">저장된 콘텐츠 후보가 없습니다.</div>`;
     refreshIcons();
+  }
+
+  function renderIdeaBrief(idea) {
+    const titleCandidates = idea.title_candidates || [idea.washed_title].filter(Boolean);
+    const shortsCandidates = idea.shorts_title_candidates || [idea.shorts_title].filter(Boolean);
+    const talkTrack = idea.talk_track || [];
+    const legalCheckpoints = idea.legal_checkpoints || idea.legal_issue || [];
+    const visualDirection = idea.visual_direction || [];
+    const editNotes = idea.edit_notes || [];
+
+    return `
+      <article class="brief-card">
+        <div class="brief-hero">
+          <div>
+            <span class="brief-kicker">${escapeHtml(idea.series || "콘텐츠 패키지")}</span>
+            <h3>${escapeHtml(idea.washed_title || "제목 후보 없음")}</h3>
+            <p>${escapeHtml(idea.one_line_positioning || idea.scene_summary || "")}</p>
+          </div>
+          <span class="score-badge priority">우선순위 ${escapeHtml(String(idea.priority || 3))}</span>
+        </div>
+
+        <div class="brief-section accent">
+          <span>오프닝</span>
+          <p>${escapeHtml(idea.opening_hook || "")}</p>
+        </div>
+
+        <div class="brief-grid">
+          <section class="brief-section">
+            <span>제목 후보</span>
+            <ol>${titleCandidates.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ol>
+          </section>
+          <section class="brief-section">
+            <span>쇼츠 후보</span>
+            <ol>${shortsCandidates.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ol>
+          </section>
+        </div>
+
+        <div class="brief-grid">
+          <section class="brief-section">
+            <span>전개</span>
+            <ol>${talkTrack.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
+          </section>
+          <section class="brief-section">
+            <span>썸네일</span>
+            <div class="brief-chip-row">
+              ${(idea.thumbnail_copy || []).map((copy) => `<em>${escapeHtml(copy)}</em>`).join("")}
+            </div>
+          </section>
+        </div>
+
+        <div class="brief-grid">
+          <section class="brief-section">
+            <span>법률 체크</span>
+            <ul>${legalCheckpoints.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+          </section>
+          <section class="brief-section">
+            <span>화면 메모</span>
+            <ul>${visualDirection.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+          </section>
+        </div>
+
+        <div class="brief-section">
+          <span>편집 주의</span>
+          <ul>${editNotes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+        </div>
+      </article>
+    `;
+  }
+
+  function formatIdeaBrief(idea) {
+    return [
+      `[${idea.series || "콘텐츠 패키지"}]`,
+      `메인 제목: ${idea.washed_title || ""}`,
+      `한 줄 포지션: ${idea.one_line_positioning || idea.scene_summary || ""}`,
+      "",
+      `오프닝: ${idea.opening_hook || ""}`,
+      "",
+      "제목 후보",
+      ...(idea.title_candidates || []).map((item, index) => `${index + 1}. ${item}`),
+      "",
+      "쇼츠 제목 후보",
+      ...(idea.shorts_title_candidates || []).map((item, index) => `${index + 1}. ${item}`),
+      "",
+      "전개",
+      ...((idea.talk_track || idea.key_scenes || []).map((item, index) => `${index + 1}. ${item}`)),
+      "",
+      `위험 문장: ${idea.dangerous_sentence || ""}`,
+      `법률 쟁점: ${(idea.legal_issue || []).join(", ")}`,
+      `필요 자료: ${(idea.required_documents || []).join(", ")}`,
+      `썸네일: ${(idea.thumbnail_copy || []).join(" / ")}`,
+      `댓글 질문: ${idea.comment_question || ""}`,
+      "",
+      `검수 메모: ${idea.risk_note || ""}`,
+    ].join("\n");
   }
 
   function renderGuardrails() {
@@ -1216,10 +1312,10 @@
 
   async function onCopyIdea() {
     if (!currentIdea) return;
-    const text = JSON.stringify(currentIdea, null, 2);
+    const text = formatIdeaBrief(currentIdea);
     try {
       await navigator.clipboard.writeText(text);
-      toast("생성 결과를 복사했습니다.");
+      toast("제작 브리프를 복사했습니다.");
     } catch {
       toast("브라우저에서 클립보드를 허용하지 않았습니다.");
     }
@@ -1337,8 +1433,9 @@
 
   function createContentPackage(source, lawyerInput, persistId = true) {
     const lawyer = lawyerInput || {};
-    const titles = buildTitles(source, lawyer);
-    const shortsTitles = buildShortsTitles(source, lawyer);
+    const context = buildContentContext(source, lawyer);
+    const titles = buildTitles(source, lawyer, context);
+    const shortsTitles = buildShortsTitles(source, lawyer, context);
     const issueList = unique([...splitList(source.legal_issue), ...splitList(lawyer.legal_issue)]).slice(0, 5);
     const docs = unique([...documentsFor(source), ...splitList(lawyer.required_documents)]).slice(0, 6);
     const series = lawyer.content_angle || pickSeries(source);
@@ -1356,91 +1453,159 @@
       title_candidates: titles,
       shorts_title_candidates: shortsTitles,
       series,
-      opening_hook: buildOpeningHook(source, lawyer, scene),
+      one_line_positioning: buildOneLinePositioning(source, lawyer, context, scene),
+      tone_guide: buildToneGuide(context),
+      opening_hook: buildOpeningHook(source, lawyer, scene, context),
       scene_summary: scene,
       dangerous_sentence: dangerous,
       legal_issue: issueList.length ? issueList : ["자료 검토 필요"],
       required_documents: docs.length ? docs : ["계약서", "카톡", "입금내역"],
-      thumbnail_copy: buildThumbnailCopy(source, dangerous),
-      key_scenes: buildKeyScenes(source, lawyer),
-      comment_question: buildCommentQuestion(source, series),
+      thumbnail_copy: buildThumbnailCopy(source, dangerous, context),
+      key_scenes: buildKeyScenes(source, lawyer, context),
+      talk_track: buildTalkTrack(source, lawyer, context),
+      legal_checkpoints: buildLegalCheckpoints(source, lawyer, context),
+      visual_direction: buildVisualDirection(source, context),
+      edit_notes: buildEditNotes(source, lawyer, context),
+      comment_question: buildCommentQuestion(source, series, context),
       risk_note: buildRiskNote(source, lawyer),
       needs_lawyer_review: true,
       status: "draft",
     };
   }
 
-  function buildTitles(source, lawyer) {
+  function buildContentContext(source, lawyer) {
     const text = normalizeText([source.title, source.raw_summary, lawyer.raw_note].join(" "));
+    const relation =
+      source.people_relation && source.people_relation !== "기타" ? source.people_relation : detectPeopleRelation(text);
+    const relationship = relation && relation !== "기타" ? relation : "가까운 사람";
+    let caseKind = "general";
+    if (/정산|통장|매출|계좌|수익|회계/.test(text)) caseKind = "settlement";
+    if (/상표|브랜드|로고|아이디어/.test(text)) caseKind = "brand";
+    if (/명의|사업자등록|대표/.test(text)) caseKind = "nominee";
+    if (/계정|비밀번호|비번|인스타|유튜브|스마트스토어|쇼핑몰/.test(text)) caseKind = "account";
+    if (/투자|빌려|대여금|차용증|원금|송금/.test(text)) caseKind = "money";
+    if (/퇴사|거래처|영업비밀|고객명단|경업|빼가기/.test(text)) caseKind = "tradeSecret";
+
+    const stakes = {
+      settlement: "돈의 흐름과 정산 기준",
+      brand: "브랜드를 누가 만들고 어떻게 써 왔는지",
+      nominee: "서류상 명의와 실제 운영 기여",
+      account: "계정 접근권과 수익 귀속",
+      money: "송금 당시의 약속과 반환 정황",
+      tradeSecret: "자료 반출 경위와 경쟁 가능성",
+      general: "사실관계와 남아 있는 자료",
+    };
+
+    const conflicts = {
+      settlement: "신뢰 문제처럼 보이지만 결국 숫자와 자료의 문제",
+      brand: "이름을 같이 만들었다는 기억과 권리 명의가 갈라지는 문제",
+      nominee: "내 사업이라는 감각과 서류상 명의가 충돌하는 문제",
+      account: "같이 키운 자산을 누가 통제하는지의 문제",
+      money: "호의로 보낸 돈이 투자였는지 대여였는지 갈리는 문제",
+      tradeSecret: "관계가 끝난 뒤 자료와 거래처가 어디까지 허용되는지의 문제",
+      general: "억울함을 법적으로 설명 가능한 자료로 바꾸는 문제",
+    };
+
+    return {
+      text,
+      caseKind,
+      relationship,
+      stake: stakes[caseKind],
+      conflict: conflicts[caseKind],
+    };
+  }
+
+  function buildOneLinePositioning(source, lawyer, context, scene) {
+    const issue = splitList(source.legal_issue || lawyer.legal_issue)[0] || "자료 검토";
+    return `이 사안은 ${stripEndPunctuation(scene)}에서 출발합니다. ${context.conflict}로 잡고, ${issue} 관점에서 필요한 자료를 정리합니다.`;
+  }
+
+  function buildToneGuide(context) {
+    const guides = {
+      settlement: "감정은 낮추고 숫자와 자료를 또렷하게 보여주는 차분한 경고형",
+      brand: "누구 잘못인지 몰아가기보다 권리 귀속의 기준을 설명하는 해설형",
+      nominee: "억울함을 인정하되 명의와 입증의 차이를 분리하는 실무형",
+      account: "플랫폼 자산을 재산처럼 다루는 냉정한 체크리스트형",
+      money: "가까운 관계의 돈거래를 기록과 약속의 문제로 바꾸는 상담형",
+      tradeSecret: "분노보다 금지되는 행동의 선을 보여주는 리스크 안내형",
+      general: "사연 팔이보다 증거 정리를 우선하는 담백한 설명형",
+    };
+    return guides[context.caseKind] || guides.general;
+  }
+
+  function buildTitles(source, lawyer, context = buildContentContext(source, lawyer)) {
     const titles = [];
-    const relation = source.people_relation && source.people_relation !== "기타" ? source.people_relation : "친구";
+    const sceneTitle = trimTo(lawyer.situation || source.title, 42);
+    const templates = {
+      settlement: [
+        `${context.relationship}와 시작한 사업, 정산표가 사라졌을 때`,
+        "통장을 못 보는 동업자에게 먼저 필요한 것",
+        "감정 싸움처럼 보이지만 결국 숫자의 문제입니다",
+      ],
+      brand: [
+        "같이 만든 이름인데 권리는 한 사람에게 있을 때",
+        "브랜드를 같이 키웠다면 상표 명의부터 봐야 합니다",
+        "내가 만든 브랜드라는 말만으로는 부족합니다",
+      ],
+      nominee: [
+        "내 돈이 들어간 가게, 서류상 대표가 따로 있을 때",
+        "사업자등록증에 이름이 없으면 무엇부터 봐야 할까",
+        "명의와 실제 운영자가 다를 때 생기는 일",
+      ],
+      account: [
+        "같이 키운 계정의 비밀번호가 바뀌었을 때",
+        "계정은 로그인하는 사람이 아니라 자료로 판단합니다",
+        "수익 계좌가 바뀐 날 먼저 캡처해야 할 것들",
+      ],
+      money: [
+        "빌려준 돈인지 투자금인지 갈리는 지점",
+        "가까운 사이의 송금이 분쟁이 되는 순간",
+        "차용증이 없을 때 돈거래를 설명하는 방법",
+      ],
+      tradeSecret: [
+        "퇴사 뒤 거래처 연락, 어디서부터 위험할까",
+        "자료를 가져간 사람보다 먼저 봐야 할 기록",
+        "거래처 빼가기 분쟁에서 놓치기 쉬운 기준",
+      ],
+      general: [
+        `${sceneTitle}에서 먼저 확인할 자료`,
+        "억울한 사연을 법적 쟁점으로 바꾸는 순서",
+        "감정은 이해되지만, 판단은 자료로 합니다",
+      ],
+    };
 
-    if (/상표|브랜드|로고|아이디어/.test(text)) {
-      titles.push(
-        `같이 만든 브랜드인데 상표권자는 ${relation}였습니다`,
-        "이름은 같이 지었는데, 권리는 혼자 가져갔습니다",
-        "내 브랜드인데 내 이름이 없습니다",
-      );
-    }
-    if (/정산|통장|매출|계좌|수익/.test(text)) {
-      titles.push(
-        "동업자가 통장을 안 보여줍니다. 이거 소송감인가요?",
-        "정산표가 사라진 날, 동업은 끝났습니다",
-        "“너 나 못 믿냐?” 이 말 나오면 위험합니다",
-      );
-    }
-    if (/명의|사업자등록|대표/.test(text)) {
-      titles.push(
-        "돈도 냈고 일도 했는데, 서류상 사장은 친구였습니다",
-        "내 가게인 줄 알았는데 내 이름이 없었습니다",
-        "사업자등록증에 이름이 없으면 끝일까요?",
-      );
-    }
-    if (/계정|비밀번호|비번|인스타|유튜브|스마트스토어|쇼핑몰/.test(text)) {
-      titles.push(
-        "같이 키운 계정, 비밀번호가 바뀐 날",
-        "이 계정, 누가 가져가야 할까요?",
-        "수익 계좌가 바뀌면 먼저 봐야 할 것들",
-      );
-    }
-    if (/투자|빌려|대여금|차용증|원금/.test(text)) {
-      titles.push(
-        "돈 빌려줬더니 투자였다고 합니다",
-        "“투자였잖아”라는 말이 나오는 이유",
-        "가까운 사이의 돈거래, 끝나고 나면 증거 싸움입니다",
-      );
-    }
-
-    titles.push(
-      lawyer.situation ? `${lawyer.situation}. 이거 소송감인가요?` : `${source.title}. 이거 소송감인가요?`,
-      "변호사가 보면 이건 그냥 싸움이 아닙니다",
-    );
+    titles.push(...(templates[context.caseKind] || templates.general), `${sceneTitle}에서 놓치면 안 되는 것`);
     return unique(titles).slice(0, 5);
   }
 
-  function buildShortsTitles(source, lawyer) {
+  function buildShortsTitles(source, lawyer, context = buildContentContext(source, lawyer)) {
     const dangerous = lawyer.dangerous_sentence || findDangerousSentence(source);
-    const base = dangerous ? [`“${stripQuotes(dangerous)}” 이 말 나오면 위험합니다`] : [];
+    const base = dangerous ? [`“${stripQuotes(dangerous)}” 다음에 확인할 자료`] : [];
+    const byKind = {
+      settlement: ["통장 얘기 피하면 이 자료부터", "정산은 말보다 표가 먼저입니다"],
+      brand: ["상표 명의, 나중에 정말 큽니다", "같이 만든 이름의 권리는 누구에게"],
+      nominee: ["대표 이름이 다르면 여기부터 봅니다", "내 가게였다는 말의 증거"],
+      account: ["비밀번호 바뀐 날 바로 할 일", "계정 분쟁은 캡처가 먼저입니다"],
+      money: ["투자였다는 말이 나온 순간", "송금 내역만으로 부족할 수 있습니다"],
+      tradeSecret: ["퇴사 뒤 연락, 선 넘는 기준", "거래처 자료 가져가면 생기는 일"],
+      general: ["억울함을 자료로 바꾸는 순서", "감정 말고 먼저 볼 자료"],
+    };
     return unique([
       ...base,
-      "잠깐만요. 이거 그냥 싸움 아닙니다",
-      "대표님, 감정 말고 자료 봅시다",
-      "계약서 없으면 기억력 싸움 됩니다",
-      "감정적으로는 억울하지만, 법적으로는 입증해야 합니다",
+      ...(byKind[context.caseKind] || byKind.general),
+      `${context.stake}부터 확인하세요`,
     ]).slice(0, 5);
   }
 
-  function buildOpeningHook(source, lawyer, scene) {
+  function buildOpeningHook(source, lawyer, scene, context = buildContentContext(source, lawyer)) {
     if (lawyer.raw_note && lawyer.dangerous_sentence) {
-      return `${scene} 그런데 상대방이 “${stripQuotes(lawyer.dangerous_sentence)}”라고 말했습니다.`;
+      return `${sentenceText(scene)} 상대방이 “${stripQuotes(lawyer.dangerous_sentence)}”라고 말하는 순간 대화는 감정으로 흐릅니다. 그런데 법적으로는 ${context.stake}부터 봐야 합니다.`;
     }
-    if (/정산|통장|매출/.test(normalizeText(source.raw_summary))) {
-      return "친구랑 같이 사업을 시작했는데요. 어느 날부터 매출과 정산표를 한 사람만 보고 있습니다.";
+    const dangerous = findDangerousSentence(source);
+    if (dangerous) {
+      return `“${stripQuotes(dangerous)}”라는 말이 나온 사건입니다. 이 말 자체보다 중요한 건 그 뒤에 ${context.stake}를 확인할 수 있느냐입니다.`;
     }
-    if (/상표|브랜드/.test(normalizeText(source.raw_summary))) {
-      return "이름도 같이 짓고 손님도 같이 모았는데요. 상표권자는 한 명뿐이었습니다.";
-    }
-    return scene;
+    return `${sentenceText(scene)} 겉으로는 ${context.conflict}처럼 보이지만, 콘텐츠의 중심은 ${context.stake}를 어떻게 남겼는지에 둡니다.`;
   }
 
   function buildSceneSummary(source, lawyer) {
@@ -1459,30 +1624,82 @@
     return "우리 사이에 계약서까지 써야 돼?";
   }
 
-  function buildThumbnailCopy(source, dangerous) {
-    const text = normalizeText([source.title, source.raw_summary].join(" "));
-    if (/정산|통장/.test(text)) return ["통장을 안 보여준다", "친구였는데 피고", "정산표가 사라졌다"];
-    if (/상표|브랜드/.test(text)) return ["상표권자는 친구", "내 브랜드가 아니다", "이름만 같이 지었다"];
-    if (/계정|비번/.test(text)) return ["비번 바뀐 날", "계정은 누구 것", "수익 계좌가 바뀌었다"];
-    return [trimTo(stripQuotes(dangerous), 16), "이거 소송감인가요?", "자료부터 봅시다"];
+  function buildThumbnailCopy(source, dangerous, context = buildContentContext(source, {})) {
+    const templates = {
+      settlement: ["정산표가 없다", "통장 못 봅니다", "감정 말고 숫자"],
+      brand: ["상표는 한 사람", "같이 만든 이름", "권리는 자료로"],
+      nominee: ["내 돈, 남의 명의", "대표 이름이 다르다", "서류부터 봅니다"],
+      account: ["비번 바뀐 날", "계정은 누구 것", "캡처가 먼저"],
+      money: ["투자였다고요?", "송금의 의미", "차용증 없을 때"],
+      tradeSecret: ["거래처 연락", "자료 반출", "퇴사 후 선"],
+      general: [trimTo(stripQuotes(dangerous), 16), "자료부터 봅니다", "말보다 기록"],
+    };
+    return templates[context.caseKind] || templates.general;
   }
 
-  function buildKeyScenes(source, lawyer) {
+  function buildKeyScenes(source, lawyer, context = buildContentContext(source, lawyer)) {
     const dangerous = lawyer.dangerous_sentence || findDangerousSentence(source) || buildDangerousFallback(source);
     return [
       buildSceneSummary(source, lawyer),
-      `상대방의 말: “${stripQuotes(dangerous)}”`,
-      "변호사가 계약서, 입금내역, 카톡, 권한 자료를 순서대로 확인한다",
+      `상대방의 말이 “${stripQuotes(dangerous)}”처럼 감정의 프레임으로 바뀐다`,
+      `${context.stake}를 확인할 수 있는 자료를 순서대로 꺼낸다`,
     ];
   }
 
-  function buildCommentQuestion(source, series) {
-    const text = normalizeText([source.title, source.raw_summary].join(" "));
-    if (/투자|빌려/.test(text)) return "여러분이라면 이 돈을 투자로 보시나요, 빌려준 돈으로 보시나요?";
-    if (/계정|비번/.test(text)) return "여러분이라면 이 계정을 누가 가져가야 한다고 보시나요?";
-    if (/상표|브랜드/.test(text)) return "같이 만든 브랜드라면 상표권도 같이 가져야 한다고 보시나요?";
-    if (series === "이거 소송감인가요?") return "여러분이라면 이 상황을 소송감으로 보시겠습니까?";
-    return "여러분이라면 이 상황을 단순한 감정싸움으로 보시나요, 법적 분쟁으로 보시나요?";
+  function buildTalkTrack(source, lawyer, context = buildContentContext(source, lawyer)) {
+    const docs = unique([...documentsFor(source), ...splitList(lawyer.required_documents)]).slice(0, 3);
+    const dangerous = lawyer.dangerous_sentence || findDangerousSentence(source) || buildDangerousFallback(source);
+    return [
+      `사연의 출발점은 ${stripEndPunctuation(buildSceneSummary(source, lawyer))}입니다.`,
+      `갈등이 “${stripQuotes(dangerous)}” 같은 말로 감정화되는 지점을 보여줍니다.`,
+      `핵심은 ${context.stake}입니다. ${docs.length ? docs.join(", ") : "계약서, 카톡, 입금내역"}을 봐야 한다고 전환합니다.`,
+      "마지막은 당장 보내면 안 되는 말과 먼저 확보할 자료를 나눠서 정리합니다.",
+    ];
+  }
+
+  function buildLegalCheckpoints(source, lawyer, context = buildContentContext(source, lawyer)) {
+    const issues = unique([...splitList(source.legal_issue), ...splitList(lawyer.legal_issue)]).slice(0, 4);
+    const checkpoints = issues.length ? issues : ["자료 검토 필요"];
+    checkpoints.push(`${context.stake}를 입증할 객관 자료가 있는지 확인`);
+    if (source.risk_level !== "low") checkpoints.push("특정 당사자 식별 가능성 낮추기");
+    return unique(checkpoints).slice(0, 5);
+  }
+
+  function buildVisualDirection(source, context = buildContentContext(source, {})) {
+    const docs = documentsFor(source).slice(0, 3);
+    const visualByKind = {
+      settlement: ["정산표 일부가 비어 있는 화면", "카톡 말풍선과 계좌내역을 나란히 배치", "숫자와 감정 단어를 대비"],
+      brand: ["상표등록 화면과 로고 스케치를 분리", "브랜드 이름 위에 명의 표시를 강조", "같이 만든 흔적과 등록명의를 교차"],
+      nominee: ["사업자등록증의 대표명 영역 강조", "입금내역과 매장 사진을 분리", "실제 운영과 서류 명의를 대비"],
+      account: ["로그인 실패 화면", "비밀번호 변경 알림", "수익 계좌 변경 화면을 흐리게 처리"],
+      money: ["송금 내역과 짧은 카톡 문장", "투자/대여 두 갈래 도식", "차용증 없음 표시"],
+      tradeSecret: ["거래처 목록은 흐림 처리", "퇴사일과 연락 시점을 타임라인화", "자료 반출 경로를 단순 도식화"],
+      general: ["사연 문장보다 자료 목록을 먼저 보여주기", "당사자 정보는 모두 흐림 처리", "감정 단어와 증거 단어를 대비"],
+    };
+    return unique([...(visualByKind[context.caseKind] || visualByKind.general), ...docs.map((doc) => `${doc} 클로즈업`)]).slice(0, 4);
+  }
+
+  function buildEditNotes(source, lawyer, context = buildContentContext(source, lawyer)) {
+    const notes = [
+      "상대방을 범죄자처럼 단정하지 말고, 판단 기준을 설명하는 톤 유지",
+      "실제 상담 사례처럼 보이는 이름, 지역, 금액, 날짜는 각색",
+      `${context.stake}를 보여주는 자료가 없으면 결론을 열어 둠`,
+    ];
+    if (lawyer.needs_anonymization) notes.push("변호사 원석 문장은 그대로 인용하지 말고 구조만 사용");
+    return notes;
+  }
+
+  function buildCommentQuestion(source, series, context = buildContentContext(source, {})) {
+    const questions = {
+      settlement: "이 상황에서 먼저 요구해야 할 자료는 정산표일까요, 계좌내역일까요?",
+      brand: "같이 만든 브랜드라면 상표 명의는 언제 정리해야 한다고 보시나요?",
+      nominee: "서류상 명의와 실제 운영이 다를 때 어떤 자료가 가장 중요할까요?",
+      account: "같이 키운 계정이라면 비밀번호와 수익 계좌는 어떻게 관리해야 할까요?",
+      money: "이 송금은 투자금과 빌려준 돈 중 어디에 더 가까워 보이나요?",
+      tradeSecret: "퇴사 뒤 거래처 연락은 어디까지 허용된다고 보시나요?",
+      general: "이 사안에서 감정보다 먼저 확인해야 할 자료는 무엇일까요?",
+    };
+    return questions[context.caseKind] || questions.general;
   }
 
   function buildRiskNote(source, lawyer) {
@@ -1772,6 +1989,15 @@
 
   function stripQuotes(value) {
     return String(value || "").replace(/[“”"]/g, "").trim();
+  }
+
+  function stripEndPunctuation(value) {
+    return String(value || "").trim().replace(/[.!?。！？]+$/, "");
+  }
+
+  function sentenceText(value) {
+    const text = stripEndPunctuation(value);
+    return text ? `${text}.` : "";
   }
 
   function clamp(value, min, max) {

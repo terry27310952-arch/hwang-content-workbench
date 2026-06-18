@@ -1068,6 +1068,105 @@ button:focus-visible {
   white-space: pre-wrap;
 }
 
+.brief-preview {
+  min-height: 360px;
+}
+
+.brief-card {
+  display: grid;
+  gap: 14px;
+}
+
+.brief-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 18px;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.brief-hero h3 {
+  margin: 5px 0 7px;
+  font-size: 24px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.brief-hero p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.brief-kicker,
+.brief-section > span {
+  display: block;
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.brief-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.brief-section {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.brief-section.accent {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: var(--blue-soft);
+}
+
+.brief-section p {
+  margin: 7px 0 0;
+  color: var(--ink);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.brief-section ol,
+.brief-section ul {
+  display: grid;
+  gap: 7px;
+  margin: 9px 0 0;
+  padding-left: 20px;
+}
+
+.brief-section li {
+  overflow-wrap: anywhere;
+}
+
+.brief-chip-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.brief-chip-row em {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  font-style: normal;
+  font-weight: 900;
+}
+
 .phrase-list,
 .checklist,
 .keyword-cloud {
@@ -1212,8 +1311,17 @@ button:focus-visible {
   .guard-grid,
   .form-grid,
   .review-board,
-  .triage-summary {
+  .triage-summary,
+  .brief-grid {
     grid-template-columns: 1fr;
+  }
+
+  .brief-hero {
+    flex-direction: column;
+  }
+
+  .brief-hero h3 {
+    font-size: 20px;
   }
 
   .inline-form {
