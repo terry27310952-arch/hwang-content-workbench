@@ -808,6 +808,89 @@ button:focus-visible {
   color: var(--red);
 }
 
+.collector-report {
+  display: grid;
+  gap: 9px;
+  min-height: 44px;
+}
+
+.collector-report-empty,
+.collector-report-head,
+.collector-report-grid > div,
+.collector-failures {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.collector-report-empty {
+  padding: 10px 11px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.collector-report-head {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 11px;
+}
+
+.collector-report-head span,
+.collector-failures span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.collector-report-head strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.collector-report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 8px;
+}
+
+.collector-report-grid > div,
+.collector-failures {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.collector-report-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.collector-report-grid strong {
+  color: var(--teal);
+  font-size: 22px;
+}
+
+.collector-report-grid small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.collector-failures strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.collector-failures.muted {
+  background: var(--surface-soft);
+}
+
 .triage-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));

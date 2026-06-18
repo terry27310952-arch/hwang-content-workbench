@@ -229,6 +229,7 @@
       "autoLimitInput",
       "autoKeywordInput",
       "autoCollectStatus",
+      "autoCollectReport",
       "sourceSearch",
       "sourceStatusFilter",
       "sourceList",
@@ -385,6 +386,7 @@
         },
       ],
       ideas: [],
+      lastAutoCollectReport: null,
     };
   }
 
@@ -394,6 +396,7 @@
       sources: Array.isArray(input.sources) ? input.sources.map(enrichSource) : [],
       lawyerInputs: Array.isArray(input.lawyerInputs) ? input.lawyerInputs : [],
       ideas: Array.isArray(input.ideas) ? input.ideas : [],
+      lastAutoCollectReport: input.lastAutoCollectReport || null,
     };
   }
 
@@ -574,6 +577,7 @@
 
   function renderSources() {
     renderFeeds();
+    renderAutoCollectReport();
     const query = normalizeText(els.sourceSearch.value);
     const filter = els.sourceStatusFilter.value;
     const items = state.sources
@@ -760,6 +764,56 @@
         toast("RSS URL을 삭제했습니다.");
       });
     });
+  }
+
+  function renderAutoCollectReport() {
+    if (!els.autoCollectReport) return;
+    const report = state.lastAutoCollectReport;
+    if (!report) {
+      els.autoCollectReport.innerHTML = `
+        <div class="collector-report-empty">
+          자동 수집을 실행하면 유형별 저장 수와 실패한 검색 축이 여기에 남습니다.
+        </div>
+      `;
+      return;
+    }
+
+    const typeStats = ["news", "blog", "community", "legal"]
+      .filter(
+        (type) =>
+          report.added_by_type?.[type] ||
+          report.scanned_by_type?.[type] ||
+          report.skipped_by_type?.[type],
+      )
+      .map(
+        (type) => `
+          <div>
+            <span>${escapeHtml(collectTypeLabel(type))}</span>
+            <strong>${Number(report.added_by_type?.[type] || 0)}</strong>
+            <small>확인 ${Number(report.scanned_by_type?.[type] || 0)} · 중복 ${Number(report.skipped_by_type?.[type] || 0)}</small>
+          </div>
+        `,
+      )
+      .join("");
+    const failedJobs = (report.failed_jobs || [])
+      .slice(0, 4)
+      .map((job) => `<span>${escapeHtml(job.label)} · ${escapeHtml(job.query)}</span>`)
+      .join("");
+
+    els.autoCollectReport.innerHTML = `
+      <div class="collector-report-head">
+        <span>마지막 수집 ${escapeHtml(report.run_at || "")}</span>
+        <strong>저장 ${Number(report.added || 0)} · 중복 ${Number(report.skipped || 0)} · 실패 ${Number(report.failed || 0)}</strong>
+      </div>
+      <div class="collector-report-grid">
+        ${typeStats || `<div><span>결과</span><strong>0</strong><small>저장된 새 소재 없음</small></div>`}
+      </div>
+      ${
+        failedJobs
+          ? `<div class="collector-failures"><strong>확인 필요</strong>${failedJobs}</div>`
+          : `<div class="collector-failures muted"><strong>확인 필요</strong><span>실패한 검색 축 없음</span></div>`
+      }
+    `;
   }
 
   function renderLawyer() {
@@ -1161,8 +1215,12 @@
       selectedTypes.map((type) => [type, Math.ceil(maxItems / selectedTypes.length)]),
     );
     const addedByType = {};
+    const scannedByType = {};
+    const skippedByType = {};
+    const failedJobs = [];
     let added = 0;
     let scanned = 0;
+    let skipped = 0;
     let failed = 0;
 
     els.autoCollectBtn.disabled = true;
@@ -1179,23 +1237,47 @@
       try {
         const items = await fetchAutoSearchItems(job);
         scanned += items.length;
+        scannedByType[typeKey] = (scannedByType[typeKey] || 0) + items.length;
         for (const item of items) {
           if (added >= maxItems) break;
           if ((addedByType[typeKey] || 0) >= typeQuota[typeKey]) break;
           if (addSource(enrichSource(item))) {
             added += 1;
             addedByType[typeKey] = (addedByType[typeKey] || 0) + 1;
+          } else {
+            skipped += 1;
+            skippedByType[typeKey] = (skippedByType[typeKey] || 0) + 1;
           }
         }
       } catch (error) {
         failed += 1;
+        failedJobs.push({
+          label: job.label,
+          query: job.query,
+          message: error?.message || "검색 결과 확인 실패",
+        });
       }
     }
 
     els.autoCollectBtn.disabled = false;
+    state.lastAutoCollectReport = {
+      run_at: nowStamp(),
+      total_jobs: jobs.length,
+      selected_types: selectedTypes,
+      keywords,
+      max_items: maxItems,
+      scanned,
+      added,
+      skipped,
+      failed,
+      added_by_type: addedByType,
+      scanned_by_type: scannedByType,
+      skipped_by_type: skippedByType,
+      failed_jobs: failedJobs,
+    };
     renderAll();
     updateAutoStatus(
-      `완료: ${scanned}개 검색 결과 확인, 새 소재 ${added}개 저장${failed ? `, 실패 ${failed}개` : ""}`,
+      `완료: ${scanned}개 검색 결과 확인, 새 소재 ${added}개 저장, 중복 ${skipped}개${failed ? `, 실패 ${failed}개` : ""}`,
       failed && !added ? "error" : "",
     );
     toast(`자동 수집 완료: ${added}개 저장`);
@@ -1295,6 +1377,17 @@
 
   function jobTypeKey(job) {
     return job.collect_type || (job.source_type === "court" ? "legal" : job.source_type);
+  }
+
+  function collectTypeLabel(type) {
+    return (
+      {
+        news: "뉴스",
+        blog: "블로그·웹",
+        community: "커뮤니티",
+        legal: "판례·법령",
+      }[type] || type
+    );
   }
 
   function googleNewsRss(query) {
