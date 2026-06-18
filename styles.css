@@ -810,7 +810,7 @@ button:focus-visible {
 
 .triage-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
   gap: 8px;
 }
 
@@ -957,6 +957,50 @@ button:focus-visible {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.source-score-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.source-recommendation {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.score-breakdown {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.score-breakdown span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #edf2f0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.score-breakdown .negative {
+  background: var(--red-soft);
+  color: var(--red);
 }
 
 .source-link,
@@ -1399,6 +1443,10 @@ button:focus-visible {
 
   .brief-hero h3 {
     font-size: 20px;
+  }
+
+  .source-score-row {
+    grid-template-columns: 1fr;
   }
 
   .inline-form {

@@ -429,6 +429,12 @@
         copy: "뉴스, 블로그·웹, 커뮤니티, 판례 검색 결과를 먼저 모으면 후보 선별과 제작 패키지가 자동으로 이어집니다.",
       };
     }
+    if (priority.some((source) => !safeExternalUrl(source.url))) {
+      return {
+        title: "우선 후보의 원문 링크를 보강하세요",
+        copy: "제작 후보는 원문 추적이 가능해야 합니다. 링크 없는 우선 후보를 먼저 보강한 뒤 브리프로 넘기세요.",
+      };
+    }
     if (candidates.length && priority.length < 3) {
       return {
         title: "후보 선별에서 제작할 소재를 고르세요",
@@ -459,6 +465,7 @@
     const pendingReview =
       state.sources.filter((item) => item.needs_lawyer_review).length +
       state.ideas.filter((idea) => idea.status === "review").length;
+    const linkedSources = state.sources.filter((source) => safeExternalUrl(source.url)).length;
 
     els.metricSources.textContent = String(state.sources.length);
     els.metricCandidates.textContent = String(candidates.length);
@@ -474,7 +481,7 @@
         icon: "radar",
         label: "1. 자동 수집",
         value: state.sources.length,
-        meta: "뉴스·블로그·커뮤니티·판례",
+        meta: `${linkedSources}/${state.sources.length || 0} 링크 확인`,
       },
       {
         view: "candidates",
@@ -581,10 +588,7 @@
           ].join(" "),
         );
         if (query && !text.includes(query)) return false;
-        if (filter === "candidate") return source.score.total >= 9;
-        if (filter === "priority") return source.score.total >= 12;
-        if (filter === "review") return source.needs_lawyer_review;
-        return true;
+        return sourceMatchesStageFilter(source, filter);
       })
       .sort((a, b) => b.score.total - a.score.total);
 
@@ -596,6 +600,7 @@
     const candidates = getCandidates();
     const priority = getPriorityCandidates();
     const pendingReview = state.sources.filter((item) => item.needs_lawyer_review);
+    const linkedSources = state.sources.filter((item) => safeExternalUrl(item.url));
     const query = normalizeText(els.candidateSearch.value);
     const filter = els.candidateStageFilter.value;
     const items = state.sources
@@ -610,15 +615,13 @@
           ].join(" "),
         );
         if (query && !text.includes(query)) return false;
-        if (filter === "candidate") return source.score.total >= 9;
-        if (filter === "priority") return source.score.total >= 12;
-        if (filter === "review") return source.needs_lawyer_review;
-        return true;
+        return sourceMatchesStageFilter(source, filter);
       })
       .sort((a, b) => b.score.total - a.score.total);
 
     els.candidateSummary.innerHTML = [
       { label: "전체 수집", value: state.sources.length, note: "원문 소재" },
+      { label: "링크 확인", value: linkedSources.length, note: "출처 추적 가능" },
       { label: "1차 후보", value: candidates.length, note: "9점 이상" },
       { label: "우선 제작", value: priority.length, note: "12점 이상" },
       { label: "검수 필요", value: pendingReview.length, note: "표현 확인" },
@@ -639,9 +642,19 @@
     refreshIcons();
   }
 
+  function sourceMatchesStageFilter(source, filter) {
+    if (filter === "linked") return Boolean(safeExternalUrl(source.url));
+    if (filter === "missing_link") return !safeExternalUrl(source.url);
+    if (filter === "candidate") return source.score.total >= 9;
+    if (filter === "priority") return source.score.total >= 12;
+    if (filter === "review") return source.needs_lawyer_review;
+    return true;
+  }
+
   function sourceCardHtml(source) {
     const scoreClass = source.score.total >= 12 ? "priority" : source.score.total >= 9 ? "candidate" : "low";
     const categories = source.category?.length ? source.category : ["미분류"];
+    const recommendation = sourceRecommendation(source);
     return `
       <article class="source-item">
         <div class="source-top">
@@ -661,6 +674,10 @@
           ${sourceLinkHtml(source)}
           ${source.search_query ? `<span class="source-query">검색어: ${escapeHtml(source.search_query)}</span>` : ""}
         </div>
+        <div class="source-score-row">
+          <span class="source-recommendation">${escapeHtml(recommendation)}</span>
+          ${scoreBreakdownHtml(source)}
+        </div>
         <div class="source-actions">
           <button class="mini-button" type="button" data-action="generate" data-id="${escapeHtml(source.id)}">
             <i data-lucide="sparkles"></i><span>콘텐츠화</span>
@@ -673,6 +690,32 @@
           </button>
         </div>
       </article>
+    `;
+  }
+
+  function sourceRecommendation(source) {
+    if (source.score.total >= 12 && source.needs_lawyer_review) return "우선 제작 · 검수 먼저";
+    if (source.score.total >= 12) return "우선 제작";
+    if (source.score.total >= 9) return "후보 유지";
+    if (!safeExternalUrl(source.url)) return "출처 링크 보강";
+    return "관찰";
+  }
+
+  function scoreBreakdownHtml(source) {
+    const score = source.score || {};
+    const parts = [
+      ["장면", score.scene],
+      ["관계", score.relation],
+      ["쟁점", score.issue],
+      ["제목성", score.title],
+      ["댓글성", score.comments],
+      ["변호사성", score.lawyerLink],
+    ];
+    return `
+      <div class="score-breakdown" aria-label="점수 세부 근거">
+        ${parts.map(([label, value]) => `<span>${escapeHtml(label)} ${Number(value || 0)}</span>`).join("")}
+        ${score.riskPenalty ? `<span class="negative">리스크 ${score.riskPenalty}</span>` : ""}
+      </div>
     `;
   }
 
@@ -757,7 +800,10 @@
     const sortedSources = state.sources.slice().sort((a, b) => b.score.total - a.score.total);
     els.sourceSelect.innerHTML =
       sortedSources
-        .map((source) => `<option value="${escapeHtml(source.id)}">${escapeHtml(source.title)} · ${source.score.total}점</option>`)
+        .map((source) => {
+          const linkLabel = safeExternalUrl(source.url) ? "링크" : "링크없음";
+          return `<option value="${escapeHtml(source.id)}">${escapeHtml(source.title)} · ${source.score.total}점 · ${escapeHtml(source.source_name || source.source_type)} · ${linkLabel}</option>`;
+        })
         .join("") || `<option value="">원문 없음</option>`;
     els.lawyerSelect.innerHTML =
       `<option value="">자동 매칭</option>` +
@@ -769,6 +815,8 @@
       const defaultSource = sortedSources.find((source) => safeExternalUrl(source.url)) || sortedSources[0];
       currentIdea = createContentPackage(defaultSource, findBestLawyerInput(defaultSource), false);
     }
+    if (currentIdea?.source_id) els.sourceSelect.value = currentIdea.source_id;
+    if (currentIdea?.lawyer_input_id) els.lawyerSelect.value = currentIdea.lawyer_input_id;
     els.ideaPreview.innerHTML = currentIdea
       ? renderIdeaBrief(currentIdea)
       : `<div class="empty">생성할 소재를 선택하세요.</div>`;
@@ -829,6 +877,8 @@
     const coldOpenOptions = idea.cold_open_options || [];
     const storyBeats = idea.story_beats || idea.talk_track || [];
     const proofBoard = idea.proof_board || [];
+    const readiness = idea.publish_readiness || [];
+    const approvalQuestions = idea.approval_questions || [];
     const sourceUrl = safeExternalUrl(idea.source_url);
 
     return `
@@ -916,6 +966,17 @@
           <ul>${visualDirection.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
         </div>
 
+        <div class="brief-grid">
+          <section class="brief-section">
+            <span>발행 준비도</span>
+            <ul>${readiness.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+          </section>
+          <section class="brief-section">
+            <span>변호사 확인 질문</span>
+            <ul>${approvalQuestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+          </section>
+        </div>
+
         <div class="brief-section">
           <span>편집 주의</span>
           <ul>${editNotes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
@@ -950,6 +1011,12 @@
       "",
       "증거 보드",
       ...((idea.proof_board || []).map((item, index) => `${index + 1}. ${item}`)),
+      "",
+      "발행 준비도",
+      ...((idea.publish_readiness || []).map((item, index) => `${index + 1}. ${item}`)),
+      "",
+      "변호사 확인 질문",
+      ...((idea.approval_questions || []).map((item, index) => `${index + 1}. ${item}`)),
       "",
       `위험 문장: ${idea.dangerous_sentence || ""}`,
       `법률 쟁점: ${(idea.legal_issue || []).join(", ")}`,
@@ -1511,6 +1578,8 @@
     return {
       content_id: persistId ? makeId("idea") : "preview",
       priority,
+      source_id: source.id,
+      lawyer_input_id: lawyer.input_id || "",
       source_type: lawyer.input_id ? `${source.source_type} + lawyer_input` : source.source_type,
       source_name: source.source_name || source.source_type || "",
       source_url: safeExternalUrl(source.url) || source.url || "",
@@ -1538,6 +1607,8 @@
       proof_board: buildProofBoard(source, lawyer, context),
       legal_checkpoints: buildLegalCheckpoints(source, lawyer, context),
       visual_direction: buildVisualDirection(source, context),
+      publish_readiness: buildPublishReadiness(source, lawyer, context),
+      approval_questions: buildApprovalQuestions(source, lawyer, context),
       edit_notes: buildEditNotes(source, lawyer, context),
       comment_question: buildCommentQuestion(source, series, context),
       risk_note: buildRiskNote(source, lawyer),
@@ -1849,6 +1920,25 @@
       general: ["사연 문장보다 자료 목록을 먼저 보여주기", "당사자 정보는 모두 흐림 처리", "감정 단어와 증거 단어를 대비"],
     };
     return unique([...(visualByKind[context.caseKind] || visualByKind.general), ...docs.map((doc) => `${doc} 클로즈업`)]).slice(0, 4);
+  }
+
+  function buildPublishReadiness(source, lawyer, context = buildContentContext(source, lawyer)) {
+    const readiness = [];
+    readiness.push(safeExternalUrl(source.url) ? "원문 링크 확인 완료" : "원문 링크 보강 필요");
+    readiness.push(source.needs_lawyer_review ? "변호사 검수 필요" : "검수 플래그 없음");
+    readiness.push(lawyer.input_id ? "변호사 원석 매칭 완료" : "변호사 원석 추가 시 완성도 상승");
+    readiness.push(documentsFor(source).length ? "화면 자료 후보 있음" : `${context.stake}를 보여줄 자료 화면 보강 필요`);
+    return readiness;
+  }
+
+  function buildApprovalQuestions(source, lawyer, context = buildContentContext(source, lawyer)) {
+    const issue = splitList(source.legal_issue || lawyer.legal_issue)[0] || "자료 검토";
+    return [
+      `${issue} 쟁점으로 설명해도 법률적으로 과하지 않은가요?`,
+      `${context.stake}를 입증할 자료가 실제로 확보되어 있나요?`,
+      "상대방을 특정하거나 불법으로 단정하는 표현이 남아 있나요?",
+      "상담 사례라면 이름, 지역, 금액, 날짜 각색이 충분한가요?",
+    ];
   }
 
   function buildEditNotes(source, lawyer, context = buildContentContext(source, lawyer)) {
