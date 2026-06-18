@@ -820,6 +820,10 @@
     }
     if (currentIdea?.source_id) els.sourceSelect.value = currentIdea.source_id;
     if (currentIdea?.lawyer_input_id) els.lawyerSelect.value = currentIdea.lawyer_input_id;
+    const activeSavedIdea = findMatchingSavedIdeaIndex(currentIdea) >= 0;
+    const saveLabel = els.saveIdeaBtn.querySelector("span");
+    if (saveLabel) saveLabel.textContent = activeSavedIdea ? "갱신" : "저장";
+    els.saveIdeaBtn.title = activeSavedIdea ? "열어둔 브리프 갱신" : "새 브리프 저장";
     els.ideaPreview.innerHTML = currentIdea
       ? renderIdeaBrief(currentIdea)
       : `<div class="empty">생성할 소재를 선택하세요.</div>`;
@@ -836,14 +840,16 @@
     els.ideaList.innerHTML =
       state.ideas
         .slice()
-        .sort((a, b) => b.priority - a.priority || String(b.content_id).localeCompare(String(a.content_id)))
-        .map(
-          (idea) => `
+        .sort((a, b) => a.priority - b.priority || String(b.updated_at || b.saved_at || b.content_id).localeCompare(String(a.updated_at || a.saved_at || a.content_id)))
+        .map((idea) => {
+          const sourceUrl = safeExternalUrl(idea.source_url);
+          const savedMeta = idea.updated_at || idea.saved_at || "";
+          return `
             <article class="idea-item">
               <div class="idea-top">
                 <div class="idea-title">
                   <strong>${escapeHtml(idea.washed_title)}</strong>
-                  <span>${escapeHtml(idea.series)} · 우선순위 ${escapeHtml(String(idea.priority))}</span>
+                  <span>${escapeHtml(idea.series)} · 우선순위 ${escapeHtml(String(idea.priority))}${savedMeta ? ` · ${escapeHtml(savedMeta)}` : ""}</span>
                 </div>
                 <span class="status-badge ${idea.status === "approved" ? "approved" : idea.status === "review" ? "review" : ""}">
                   ${escapeHtml(statusLabel(idea.status))}
@@ -853,7 +859,21 @@
                 ${(idea.legal_issue || []).map((issue) => `<span class="pill">${escapeHtml(issue)}</span>`).join("")}
               </div>
               <div class="idea-summary">${escapeHtml(idea.opening_hook)}</div>
+              <div class="source-meta-row">
+                ${
+                  sourceUrl
+                    ? `<a class="source-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i><span>원문</span></a>`
+                    : `<span class="source-link muted"><i data-lucide="unlink"></i><span>원문 링크 없음</span></span>`
+                }
+                <span class="pill teal">${escapeHtml(idea.source_name || idea.source_type || "출처 미상")}</span>
+              </div>
               <div class="idea-actions">
+                <button class="mini-button" type="button" data-idea-load="${escapeHtml(idea.content_id)}">
+                  <i data-lucide="file-search"></i><span>브리프 열기</span>
+                </button>
+                <button class="mini-button" type="button" data-idea-copy="${escapeHtml(idea.content_id)}">
+                  <i data-lucide="copy"></i><span>복사</span>
+                </button>
                 <button class="mini-button" type="button" data-idea-status="review" data-id="${escapeHtml(idea.content_id)}">
                   <i data-lucide="send"></i><span>검수 요청</span>
                 </button>
@@ -865,8 +885,8 @@
                 </button>
               </div>
             </article>
-          `,
-        )
+          `;
+        })
         .join("") || `<div class="empty">저장된 콘텐츠 후보가 없습니다.</div>`;
     refreshIcons();
   }
@@ -1460,45 +1480,106 @@
     toast("생성 결과를 갱신했습니다.");
   }
 
-  async function onCopyIdea() {
-    if (!currentIdea) return;
-    const text = formatIdeaBrief(currentIdea);
+  async function copyBriefToClipboard(idea) {
+    if (!idea) return;
+    const text = formatIdeaBrief(idea);
     try {
       await navigator.clipboard.writeText(text);
       toast("제작 브리프를 복사했습니다.");
     } catch {
-      toast("브라우저에서 클립보드를 허용하지 않았습니다.");
+      if (copyTextFallback(text)) {
+        toast("제작 브리프를 복사했습니다.");
+      } else {
+        toast("브라우저에서 클립보드를 허용하지 않았습니다.");
+      }
     }
+  }
+
+  async function onCopyIdea() {
+    if (!currentIdea) return;
+    await copyBriefToClipboard(currentIdea);
   }
 
   function onSaveIdea() {
     if (!currentIdea) return;
+    const targetIndex = findMatchingSavedIdeaIndex(currentIdea);
+    if (targetIndex >= 0) {
+      const previous = state.ideas[targetIndex];
+      const updated = {
+        ...currentIdea,
+        content_id: previous.content_id,
+        status: previous.status || currentIdea.status || "draft",
+        saved_at: previous.saved_at || nowStamp(),
+        updated_at: nowStamp(),
+      };
+      state.ideas[targetIndex] = updated;
+      currentIdea = updated;
+      renderAll();
+      toast("저장된 브리프를 갱신했습니다.");
+      return;
+    }
     const idea = {
       ...currentIdea,
       content_id: makeId("idea"),
       status: "draft",
       saved_at: nowStamp(),
+      updated_at: nowStamp(),
     };
     state.ideas.push(idea);
+    currentIdea = idea;
     renderAll();
     toast("콘텐츠 후보를 저장했습니다.");
   }
 
   function onIdeaAction(event) {
+    const loadButton = event.target.closest("[data-idea-load]");
+    const copyButton = event.target.closest("[data-idea-copy]");
     const statusButton = event.target.closest("[data-idea-status]");
     const deleteButton = event.target.closest("[data-idea-delete]");
+    if (loadButton) {
+      const idea = state.ideas.find((item) => item.content_id === loadButton.dataset.ideaLoad);
+      if (!idea) return;
+      currentIdea = idea;
+      switchView("output");
+      renderOutput();
+      toast("저장된 브리프를 열었습니다.");
+      return;
+    }
+    if (copyButton) {
+      const idea = state.ideas.find((item) => item.content_id === copyButton.dataset.ideaCopy);
+      if (!idea) return;
+      void copyBriefToClipboard(idea);
+      return;
+    }
     if (statusButton) {
       const idea = state.ideas.find((item) => item.content_id === statusButton.dataset.id);
       if (!idea) return;
       idea.status = statusButton.dataset.ideaStatus;
+      idea.updated_at = nowStamp();
       renderAll();
       toast("검수 상태를 변경했습니다.");
+      return;
     }
     if (deleteButton) {
       state.ideas = state.ideas.filter((item) => item.content_id !== deleteButton.dataset.ideaDelete);
+      if (currentIdea?.content_id === deleteButton.dataset.ideaDelete) currentIdea = null;
       renderAll();
       toast("콘텐츠 후보를 삭제했습니다.");
     }
+  }
+
+  function findMatchingSavedIdeaIndex(idea) {
+    if (!idea) return -1;
+    if (idea.content_id && idea.content_id !== "preview") {
+      const byId = state.ideas.findIndex((item) => item.content_id === idea.content_id);
+      if (byId >= 0) return byId;
+    }
+    return state.ideas.findIndex(
+      (item) =>
+        item.source_id === idea.source_id &&
+        item.lawyer_input_id === idea.lawyer_input_id &&
+        item.washed_title === idea.washed_title,
+    );
   }
 
   function addSource(source) {
@@ -2260,6 +2341,28 @@
       .toLowerCase()
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  function copyTextFallback(text) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.inset = "0 auto auto 0";
+    textarea.style.width = "1px";
+    textarea.style.height = "1px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
+    textarea.remove();
+    return copied;
   }
 
   function trimTo(text, max) {
