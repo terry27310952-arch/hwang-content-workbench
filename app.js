@@ -657,6 +657,10 @@
           ${source.needs_lawyer_review ? `<span class="pill red">검수 필요</span>` : ""}
         </div>
         <div class="source-summary">${escapeHtml(source.raw_summary || source.full_text || "")}</div>
+        <div class="source-meta-row">
+          ${sourceLinkHtml(source)}
+          ${source.search_query ? `<span class="source-query">검색어: ${escapeHtml(source.search_query)}</span>` : ""}
+        </div>
         <div class="source-actions">
           <button class="mini-button" type="button" data-action="generate" data-id="${escapeHtml(source.id)}">
             <i data-lucide="sparkles"></i><span>콘텐츠화</span>
@@ -669,6 +673,19 @@
           </button>
         </div>
       </article>
+    `;
+  }
+
+  function sourceLinkHtml(source) {
+    const safeUrl = safeExternalUrl(source.url);
+    if (!safeUrl) {
+      return `<span class="source-link muted"><i data-lucide="unlink"></i><span>원문 링크 없음</span></span>`;
+    }
+    return `
+      <a class="source-link" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">
+        <i data-lucide="external-link"></i>
+        <span>원문 열기</span>
+      </a>
     `;
   }
 
@@ -749,7 +766,8 @@
         .join("");
 
     if (!currentIdea && sortedSources.length) {
-      currentIdea = createContentPackage(sortedSources[0], findBestLawyerInput(sortedSources[0]), false);
+      const defaultSource = sortedSources.find((source) => safeExternalUrl(source.url)) || sortedSources[0];
+      currentIdea = createContentPackage(defaultSource, findBestLawyerInput(defaultSource), false);
     }
     els.ideaPreview.innerHTML = currentIdea
       ? renderIdeaBrief(currentIdea)
@@ -805,10 +823,13 @@
   function renderIdeaBrief(idea) {
     const titleCandidates = idea.title_candidates || [idea.washed_title].filter(Boolean);
     const shortsCandidates = idea.shorts_title_candidates || [idea.shorts_title].filter(Boolean);
-    const talkTrack = idea.talk_track || [];
     const legalCheckpoints = idea.legal_checkpoints || idea.legal_issue || [];
     const visualDirection = idea.visual_direction || [];
     const editNotes = idea.edit_notes || [];
+    const coldOpenOptions = idea.cold_open_options || [];
+    const storyBeats = idea.story_beats || idea.talk_track || [];
+    const proofBoard = idea.proof_board || [];
+    const sourceUrl = safeExternalUrl(idea.source_url);
 
     return `
       <article class="brief-card">
@@ -819,6 +840,30 @@
             <p>${escapeHtml(idea.one_line_positioning || idea.scene_summary || "")}</p>
           </div>
           <span class="score-badge priority">우선순위 ${escapeHtml(String(idea.priority || 3))}</span>
+        </div>
+
+        <div class="brief-source-bar">
+          <div>
+            <span>원문</span>
+            <strong>${escapeHtml(idea.source_name || idea.source_type || "출처 미상")}</strong>
+            ${idea.source_published_at ? `<small>${escapeHtml(idea.source_published_at)}</small>` : ""}
+          </div>
+          ${
+            sourceUrl
+              ? `<a class="source-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i><span>원문 열기</span></a>`
+              : `<span class="source-link muted"><i data-lucide="unlink"></i><span>원문 링크 없음</span></span>`
+          }
+        </div>
+
+        <div class="brief-grid">
+          <section class="brief-section accent">
+            <span>핵심 논지</span>
+            <p>${escapeHtml(idea.creative_thesis || idea.one_line_positioning || "")}</p>
+          </section>
+          <section class="brief-section">
+            <span>시청자 약속</span>
+            <p>${escapeHtml(idea.viewer_promise || "")}</p>
+          </section>
         </div>
 
         <div class="brief-section accent">
@@ -837,10 +882,15 @@
           </section>
         </div>
 
+        <div class="brief-section">
+          <span>콜드오픈 선택지</span>
+          <ol>${coldOpenOptions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
+        </div>
+
         <div class="brief-grid">
           <section class="brief-section">
-            <span>전개</span>
-            <ol>${talkTrack.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
+            <span>6컷 전개</span>
+            <ol>${storyBeats.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
           </section>
           <section class="brief-section">
             <span>썸네일</span>
@@ -856,9 +906,14 @@
             <ul>${legalCheckpoints.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
           </section>
           <section class="brief-section">
-            <span>화면 메모</span>
-            <ul>${visualDirection.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            <span>증거 보드</span>
+            <ul>${proofBoard.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
           </section>
+        </div>
+
+        <div class="brief-section">
+          <span>화면 메모</span>
+          <ul>${visualDirection.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
         </div>
 
         <div class="brief-section">
@@ -873,9 +928,16 @@
     return [
       `[${idea.series || "콘텐츠 패키지"}]`,
       `메인 제목: ${idea.washed_title || ""}`,
+      `원문 링크: ${idea.source_url || ""}`,
       `한 줄 포지션: ${idea.one_line_positioning || idea.scene_summary || ""}`,
       "",
+      `핵심 논지: ${idea.creative_thesis || ""}`,
+      `시청자 약속: ${idea.viewer_promise || ""}`,
+      "",
       `오프닝: ${idea.opening_hook || ""}`,
+      "",
+      "콜드오픈 선택지",
+      ...((idea.cold_open_options || []).map((item, index) => `${index + 1}. ${item}`)),
       "",
       "제목 후보",
       ...(idea.title_candidates || []).map((item, index) => `${index + 1}. ${item}`),
@@ -883,8 +945,11 @@
       "쇼츠 제목 후보",
       ...(idea.shorts_title_candidates || []).map((item, index) => `${index + 1}. ${item}`),
       "",
-      "전개",
-      ...((idea.talk_track || idea.key_scenes || []).map((item, index) => `${index + 1}. ${item}`)),
+      "6컷 전개",
+      ...((idea.story_beats || idea.talk_track || idea.key_scenes || []).map((item, index) => `${index + 1}. ${item}`)),
+      "",
+      "증거 보드",
+      ...((idea.proof_board || []).map((item, index) => `${index + 1}. ${item}`)),
       "",
       `위험 문장: ${idea.dangerous_sentence || ""}`,
       `법률 쟁점: ${(idea.legal_issue || []).join(", ")}`,
@@ -1447,6 +1512,9 @@
       content_id: persistId ? makeId("idea") : "preview",
       priority,
       source_type: lawyer.input_id ? `${source.source_type} + lawyer_input` : source.source_type,
+      source_name: source.source_name || source.source_type || "",
+      source_url: safeExternalUrl(source.url) || source.url || "",
+      source_published_at: source.published_at || "",
       raw_topic: source.title,
       washed_title: titles[0],
       shorts_title: shortsTitles[0],
@@ -1454,8 +1522,11 @@
       shorts_title_candidates: shortsTitles,
       series,
       one_line_positioning: buildOneLinePositioning(source, lawyer, context, scene),
+      creative_thesis: buildCreativeThesis(source, lawyer, context, scene),
+      viewer_promise: buildViewerPromise(source, lawyer, context),
       tone_guide: buildToneGuide(context),
       opening_hook: buildOpeningHook(source, lawyer, scene, context),
+      cold_open_options: buildColdOpenOptions(source, lawyer, context),
       scene_summary: scene,
       dangerous_sentence: dangerous,
       legal_issue: issueList.length ? issueList : ["자료 검토 필요"],
@@ -1463,6 +1534,8 @@
       thumbnail_copy: buildThumbnailCopy(source, dangerous, context),
       key_scenes: buildKeyScenes(source, lawyer, context),
       talk_track: buildTalkTrack(source, lawyer, context),
+      story_beats: buildStoryBeats(source, lawyer, context),
+      proof_board: buildProofBoard(source, lawyer, context),
       legal_checkpoints: buildLegalCheckpoints(source, lawyer, context),
       visual_direction: buildVisualDirection(source, context),
       edit_notes: buildEditNotes(source, lawyer, context),
@@ -1518,6 +1591,34 @@
   function buildOneLinePositioning(source, lawyer, context, scene) {
     const issue = splitList(source.legal_issue || lawyer.legal_issue)[0] || "자료 검토";
     return `이 사안은 ${stripEndPunctuation(scene)}에서 출발합니다. ${context.conflict}로 잡고, ${issue} 관점에서 필요한 자료를 정리합니다.`;
+  }
+
+  function buildCreativeThesis(source, lawyer, context, scene) {
+    const docs = unique([...documentsFor(source), ...splitList(lawyer.required_documents)]).slice(0, 3);
+    const docText = docs.length ? docs.join(", ") : "계약서, 카톡, 입금내역";
+    const theses = {
+      settlement: `이 영상은 “믿느냐 못 믿느냐” 싸움이 아니라, ${docText} 같은 자료로 정산 기준을 복원하는 이야기입니다.`,
+      brand: `이 영상은 “내가 만들었다”는 기억을 권리로 바꾸려면 어떤 흔적이 필요한지 보여주는 이야기입니다.`,
+      nominee: `이 영상은 “내 사업이었다”는 감각과 서류상 명의 사이의 간극을 자료로 좁히는 이야기입니다.`,
+      account: `이 영상은 계정을 감정의 소유물이 아니라 접근권, 운영 기록, 수익 흐름이 남는 자산으로 다룹니다.`,
+      money: `이 영상은 가까운 사이의 송금을 투자와 대여 중 어디에 놓을지 자료로 가르는 이야기입니다.`,
+      tradeSecret: `이 영상은 퇴사 뒤 거래처와 자료를 어디까지 다룰 수 있는지 선을 긋는 이야기입니다.`,
+      general: `이 영상은 ${stripEndPunctuation(scene)}라는 사연을 감정 호소가 아니라 판단 가능한 자료의 문제로 바꾸는 이야기입니다.`,
+    };
+    return theses[context.caseKind] || theses.general;
+  }
+
+  function buildViewerPromise(source, lawyer, context) {
+    const promises = {
+      settlement: "동업자가 정산을 피할 때 바로 싸우기 전에 어떤 자료부터 요구해야 하는지 알 수 있습니다.",
+      brand: "같이 만든 브랜드가 내 권리가 되려면 이름, 사용 흔적, 등록명의를 어떻게 봐야 하는지 알 수 있습니다.",
+      nominee: "명의가 내 이름이 아닐 때도 포기하기 전에 확인할 운영 자료가 무엇인지 알 수 있습니다.",
+      account: "비밀번호가 바뀐 계정 분쟁에서 캡처해야 할 화면과 말하면 안 되는 문장을 알 수 있습니다.",
+      money: "차용증이 없는 돈거래에서 투자금과 빌려준 돈을 가르는 단서를 알 수 있습니다.",
+      tradeSecret: "퇴사 뒤 거래처 연락과 자료 반출이 위험해지는 기준을 알 수 있습니다.",
+      general: "억울한 사연을 상담 가능한 쟁점과 자료 목록으로 정리하는 방법을 알 수 있습니다.",
+    };
+    return promises[context.caseKind] || promises.general;
   }
 
   function buildToneGuide(context) {
@@ -1608,6 +1709,49 @@
     return `${sentenceText(scene)} 겉으로는 ${context.conflict}처럼 보이지만, 콘텐츠의 중심은 ${context.stake}를 어떻게 남겼는지에 둡니다.`;
   }
 
+  function buildColdOpenOptions(source, lawyer, context = buildContentContext(source, lawyer)) {
+    const dangerous = lawyer.dangerous_sentence || findDangerousSentence(source) || buildDangerousFallback(source);
+    const scene = stripEndPunctuation(buildSceneSummary(source, lawyer));
+    const optionsByKind = {
+      settlement: [
+        `“${stripQuotes(dangerous)}” 이 말이 나오면, 정산 얘기는 감정 싸움처럼 보이기 시작합니다.`,
+        `${scene}. 여기서 바로 따질 게 아니라 먼저 봐야 할 건 숫자입니다.`,
+        "동업에서 제일 위험한 순간은 돈 얘기를 꺼냈는데 상대가 신뢰 얘기로 돌릴 때입니다.",
+      ],
+      brand: [
+        "브랜드 이름을 같이 만들었다고 해서 권리도 자동으로 같이 생기지는 않습니다.",
+        `${scene}. 이때 중요한 건 누가 더 고생했느냐보다 어떤 기록이 남았느냐입니다.`,
+        "상표 분쟁은 감정상 억울한 사람과 서류상 권리자가 달라지는 순간 터집니다.",
+      ],
+      nominee: [
+        "내 돈이 들어갔는데 대표 이름이 다르면, 말보다 서류가 먼저 움직입니다.",
+        `${scene}. 이 사안은 억울함보다 실제 운영 흔적을 먼저 봐야 합니다.`,
+        "명의가 다른 사업은 끝날 때 갑자기 남의 사업처럼 보이기 시작합니다.",
+      ],
+      account: [
+        "비밀번호가 바뀐 순간, 계정 분쟁은 이미 시작된 겁니다.",
+        `${scene}. 여기서 화내기 전에 캡처해야 할 화면이 있습니다.`,
+        "같이 키운 계정이라고 말하려면 같이 키운 흔적이 남아 있어야 합니다.",
+      ],
+      money: [
+        "돈을 보낼 때는 호의였는데, 돌려받을 때는 법률문제가 됩니다.",
+        `${scene}. 이때 핵심은 돈을 보낸 이유가 기록에 남아 있느냐입니다.`,
+        "상대가 투자였다고 말하는 순간, 송금 내역만으로는 부족할 수 있습니다.",
+      ],
+      tradeSecret: [
+        "퇴사 뒤 거래처에 연락하는 순간, 단순 영업이 아니라 분쟁이 될 수 있습니다.",
+        `${scene}. 이 사안은 누가 먼저 화났는지보다 어떤 자료가 이동했는지가 중요합니다.`,
+        "거래처 목록은 그냥 전화번호부가 아니라 회사의 자산으로 평가될 수 있습니다.",
+      ],
+      general: [
+        `${scene}. 이 사안을 감정으로만 보면 놓치는 자료가 생깁니다.`,
+        "억울하다는 말이 법적 주장으로 바뀌려면 순서가 필요합니다.",
+        `핵심은 ${context.stake}입니다. 이걸 보여줄 자료가 있는지부터 봐야 합니다.`,
+      ],
+    };
+    return optionsByKind[context.caseKind] || optionsByKind.general;
+  }
+
   function buildSceneSummary(source, lawyer) {
     if (lawyer.situation) return lawyer.situation;
     const summary = source.raw_summary || source.full_text || source.title;
@@ -1655,6 +1799,34 @@
       `핵심은 ${context.stake}입니다. ${docs.length ? docs.join(", ") : "계약서, 카톡, 입금내역"}을 봐야 한다고 전환합니다.`,
       "마지막은 당장 보내면 안 되는 말과 먼저 확보할 자료를 나눠서 정리합니다.",
     ];
+  }
+
+  function buildStoryBeats(source, lawyer, context = buildContentContext(source, lawyer)) {
+    const scene = stripEndPunctuation(buildSceneSummary(source, lawyer));
+    const dangerous = lawyer.dangerous_sentence || findDangerousSentence(source) || buildDangerousFallback(source);
+    const docs = unique([...documentsFor(source), ...splitList(lawyer.required_documents)]).slice(0, 4);
+    const issue = splitList(source.legal_issue || lawyer.legal_issue)[0] || "자료 검토";
+    return [
+      `0-5초: ${scene}라는 사연을 한 문장으로 던지고, 시청자가 자기 일처럼 느끼게 합니다.`,
+      `5-18초: 상대방의 말 “${stripQuotes(dangerous)}”을 보여주되, 공격보다 프레임 전환에 씁니다.`,
+      `18-35초: 이 사안의 핵심이 ${context.conflict}라는 점을 설명합니다.`,
+      `35-55초: ${docs.length ? docs.join(", ") : "계약서, 카톡, 입금내역"}을 화면에 띄우며 판단 기준을 잡습니다.`,
+      `55-75초: ${issue} 쟁점에서 유리한 말과 위험한 말을 나눠 보여줍니다.`,
+      "마무리: 결론을 단정하지 않고, 지금 당장 확보할 자료 3개와 피해야 할 문장 1개로 끝냅니다.",
+    ];
+  }
+
+  function buildProofBoard(source, lawyer, context = buildContentContext(source, lawyer)) {
+    const docs = unique([...documentsFor(source), ...splitList(lawyer.required_documents)]).slice(0, 5);
+    const issue = splitList(source.legal_issue || lawyer.legal_issue)[0] || "자료 검토";
+    const board = [
+      `주장: ${context.stake}가 핵심입니다.`,
+      `확인: ${docs.length ? docs.join(", ") : "계약서, 카톡, 입금내역"}으로 말과 돈의 흐름을 맞춰 봅니다.`,
+      `쟁점: ${issue} 관점에서 주장 가능한 부분과 아직 부족한 부분을 분리합니다.`,
+      `주의: 원문 링크와 실제 사례는 특정인이 드러나지 않게 각색합니다.`,
+    ];
+    if (safeExternalUrl(source.url)) board.unshift(`원문: ${source.source_name || "수집 원문"} 링크에서 사실관계 출처를 확인합니다.`);
+    return board;
   }
 
   function buildLegalCheckpoints(source, lawyer, context = buildContentContext(source, lawyer)) {
@@ -1989,6 +2161,17 @@
 
   function stripQuotes(value) {
     return String(value || "").replace(/[“”"]/g, "").trim();
+  }
+
+  function safeExternalUrl(value) {
+    const url = String(value || "").trim();
+    if (!url) return "";
+    try {
+      const parsed = new URL(url);
+      return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
+    } catch {
+      return "";
+    }
   }
 
   function stripEndPunctuation(value) {
