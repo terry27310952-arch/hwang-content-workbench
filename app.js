@@ -682,6 +682,9 @@
           <button class="mini-button" type="button" data-action="generate" data-id="${escapeHtml(source.id)}">
             <i data-lucide="sparkles"></i><span>콘텐츠화</span>
           </button>
+          <button class="mini-button" type="button" data-action="link" data-id="${escapeHtml(source.id)}">
+            <i data-lucide="link"></i><span>${safeExternalUrl(source.url) ? "링크 수정" : "링크 추가"}</span>
+          </button>
           <button class="mini-button" type="button" data-action="review" data-id="${escapeHtml(source.id)}">
             <i data-lucide="shield-check"></i><span>${source.needs_lawyer_review ? "검수 해제" : "검수 요청"}</span>
           </button>
@@ -1379,6 +1382,21 @@
       source.needs_lawyer_review = !source.needs_lawyer_review;
       renderAll();
       toast(source.needs_lawyer_review ? "검수 요청으로 표시했습니다." : "검수 표시를 해제했습니다.");
+    }
+    if (button.dataset.action === "link") {
+      const nextUrl = window.prompt("원문 URL을 입력하세요. 비우면 링크를 제거합니다.", source.url || "");
+      if (nextUrl === null) return;
+      const trimmed = nextUrl.trim();
+      if (trimmed && !safeExternalUrl(trimmed)) {
+        toast("http 또는 https 원문 URL만 저장할 수 있습니다.");
+        return;
+      }
+      source.url = trimmed;
+      if (currentIdea?.source_id === source.id) {
+        currentIdea = createContentPackage(source, findBestLawyerInput(source), false);
+      }
+      renderAll();
+      toast(trimmed ? "원문 링크를 저장했습니다." : "원문 링크를 제거했습니다.");
     }
     if (button.dataset.action === "delete") {
       state.sources = state.sources.filter((item) => item.id !== source.id);
