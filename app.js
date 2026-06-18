@@ -207,6 +207,9 @@
       "metricCandidates",
       "metricPriority",
       "metricReview",
+      "nextActionTitle",
+      "nextActionCopy",
+      "pipelineStrip",
       "currentWeekBadge",
       "monthlyTimeline",
       "seriesChart",
@@ -229,6 +232,10 @@
       "sourceSearch",
       "sourceStatusFilter",
       "sourceList",
+      "candidateSummary",
+      "candidateSearch",
+      "candidateStageFilter",
+      "candidateList",
       "fillSampleBtn",
       "questionList",
       "lawyerForm",
@@ -250,6 +257,8 @@
       "exportCsvBtn",
       "exportJsonBtn",
       "importJsonInput",
+      "goCollectBtn",
+      "goCandidatesBtn",
       "goOutputBtn",
       "toast",
     ].forEach((id) => {
@@ -276,6 +285,9 @@
     els.sourceSearch.addEventListener("input", renderSources);
     els.sourceStatusFilter.addEventListener("change", renderSources);
     els.sourceList.addEventListener("click", onSourceAction);
+    els.candidateSearch.addEventListener("input", renderCandidates);
+    els.candidateStageFilter.addEventListener("change", renderCandidates);
+    els.candidateList.addEventListener("click", onSourceAction);
 
     els.lawyerForm.addEventListener("submit", onLawyerSubmit);
     els.lawyerList.addEventListener("click", onLawyerAction);
@@ -288,7 +300,14 @@
     els.exportCsvBtn.addEventListener("click", exportCandidatesCsv);
     els.exportJsonBtn.addEventListener("click", exportJson);
     els.importJsonInput.addEventListener("change", importJson);
+    els.goCollectBtn.addEventListener("click", () => switchView("sources"));
+    els.goCandidatesBtn.addEventListener("click", () => switchView("candidates"));
     els.goOutputBtn.addEventListener("click", () => switchView("output"));
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-jump-view]");
+      if (button) switchView(button.dataset.jumpView);
+    });
   }
 
   function loadState() {
@@ -388,6 +407,7 @@
     renderShell();
     renderDashboard();
     renderSources();
+    renderCandidates();
     renderLawyer();
     renderOutput();
     renderGuardrails();
@@ -402,6 +422,37 @@
     els.targetPriority.textContent = String(priority.length);
   }
 
+  function getNextAction(candidates, priority, pendingReview) {
+    if (state.sources.length < 10) {
+      return {
+        title: "자동 수집부터 시작하세요",
+        copy: "뉴스, 블로그·웹, 커뮤니티, 판례 검색 결과를 먼저 모으면 후보 선별과 제작 패키지가 자동으로 이어집니다.",
+      };
+    }
+    if (candidates.length && priority.length < 3) {
+      return {
+        title: "후보 선별에서 제작할 소재를 고르세요",
+        copy: "점수 9점 이상 후보를 훑고, 12점 이상 또는 검수 필요 소재를 우선 제작 대상으로 올리세요.",
+      };
+    }
+    if (priority.length && !state.ideas.length) {
+      return {
+        title: "우선 후보를 제작 패키지로 넘기세요",
+        copy: "선별된 소재를 제목, 쇼츠 훅, 썸네일 문구, 법률 쟁점이 포함된 제작 패키지로 변환할 차례입니다.",
+      };
+    }
+    if (pendingReview) {
+      return {
+        title: "검수 대기 항목을 확인하세요",
+        copy: "법률 광고 리스크, 단정 표현, 실제 사건 식별 가능성을 확인한 뒤 발행 가능한 후보만 남기세요.",
+      };
+    }
+    return {
+      title: "다음 수집 키워드를 갱신하세요",
+      copy: "이번 달 후보 풀이 정리되었습니다. 상담에서 반복되는 표현과 최근 이슈를 새 키워드로 추가하세요.",
+    };
+  }
+
   function renderDashboard() {
     const candidates = getCandidates();
     const priority = getPriorityCandidates();
@@ -413,6 +464,54 @@
     els.metricCandidates.textContent = String(candidates.length);
     els.metricPriority.textContent = String(priority.length);
     els.metricReview.textContent = String(pendingReview);
+
+    const nextAction = getNextAction(candidates, priority, pendingReview);
+    els.nextActionTitle.textContent = nextAction.title;
+    els.nextActionCopy.textContent = nextAction.copy;
+    els.pipelineStrip.innerHTML = [
+      {
+        view: "sources",
+        icon: "radar",
+        label: "1. 자동 수집",
+        value: state.sources.length,
+        meta: "뉴스·블로그·커뮤니티·판례",
+      },
+      {
+        view: "candidates",
+        icon: "list-checks",
+        label: "2. 후보 선별",
+        value: candidates.length,
+        meta: "점수 9점 이상",
+      },
+      {
+        view: "output",
+        icon: "sparkles",
+        label: "3. 제작 패키지",
+        value: state.ideas.length,
+        meta: "제목·훅·썸네일",
+      },
+      {
+        view: "guardrails",
+        icon: "shield-check",
+        label: "4. 리스크 검수",
+        value: pendingReview,
+        meta: "표현·비식별·법률광고",
+      },
+    ]
+      .map(
+        (item) => `
+          <article class="pipeline-card">
+            <div>
+              <i data-lucide="${item.icon}"></i>
+              <span>${escapeHtml(item.label)}</span>
+            </div>
+            <strong>${item.value}</strong>
+            <p>${escapeHtml(item.meta)}</p>
+            <button class="mini-button" data-jump-view="${item.view}" type="button">열기</button>
+          </article>
+        `,
+      )
+      .join("");
 
     const activeWeek = getActiveWeek();
     els.currentWeekBadge.textContent = activeWeek.week;
@@ -489,42 +588,88 @@
       })
       .sort((a, b) => b.score.total - a.score.total);
 
-    els.sourceList.innerHTML =
-      items
-        .map((source) => {
-          const scoreClass = source.score.total >= 12 ? "priority" : source.score.total >= 9 ? "candidate" : "low";
-          const categories = source.category?.length ? source.category : ["미분류"];
-          return `
-            <article class="source-item">
-              <div class="source-top">
-                <div class="source-title">
-                  <strong>${escapeHtml(source.title)}</strong>
-                  <span>${escapeHtml(source.source_name || source.source_type)} · ${escapeHtml(source.published_at || "-")}</span>
-                </div>
-                <span class="score-badge ${scoreClass}">${source.score.total}점</span>
-              </div>
-              <div class="pill-row">
-                ${categories.map((category) => `<span class="pill teal">${escapeHtml(category)}</span>`).join("")}
-                ${(source.keywords || []).slice(0, 6).map((keyword) => `<span class="pill">${escapeHtml(keyword)}</span>`).join("")}
-                ${source.needs_lawyer_review ? `<span class="pill red">검수 필요</span>` : ""}
-              </div>
-              <div class="source-summary">${escapeHtml(source.raw_summary || source.full_text || "")}</div>
-              <div class="source-actions">
-                <button class="mini-button" type="button" data-action="generate" data-id="${escapeHtml(source.id)}">
-                  <i data-lucide="sparkles"></i><span>콘텐츠화</span>
-                </button>
-                <button class="mini-button" type="button" data-action="review" data-id="${escapeHtml(source.id)}">
-                  <i data-lucide="shield-check"></i><span>${source.needs_lawyer_review ? "검수 해제" : "검수 요청"}</span>
-                </button>
-                <button class="mini-button danger" type="button" data-action="delete" data-id="${escapeHtml(source.id)}">
-                  <i data-lucide="trash-2"></i><span>삭제</span>
-                </button>
-              </div>
-            </article>
-          `;
-        })
-        .join("") || `<div class="empty">수집 원문이 없습니다.</div>`;
+    els.sourceList.innerHTML = items.map(sourceCardHtml).join("") || `<div class="empty">수집 원문이 없습니다.</div>`;
     refreshIcons();
+  }
+
+  function renderCandidates() {
+    const candidates = getCandidates();
+    const priority = getPriorityCandidates();
+    const pendingReview = state.sources.filter((item) => item.needs_lawyer_review);
+    const query = normalizeText(els.candidateSearch.value);
+    const filter = els.candidateStageFilter.value;
+    const items = state.sources
+      .filter((source) => {
+        const text = normalizeText(
+          [
+            source.title,
+            source.raw_summary,
+            source.category?.join(" "),
+            source.keywords?.join(" "),
+            source.legal_issue,
+          ].join(" "),
+        );
+        if (query && !text.includes(query)) return false;
+        if (filter === "candidate") return source.score.total >= 9;
+        if (filter === "priority") return source.score.total >= 12;
+        if (filter === "review") return source.needs_lawyer_review;
+        return true;
+      })
+      .sort((a, b) => b.score.total - a.score.total);
+
+    els.candidateSummary.innerHTML = [
+      { label: "전체 수집", value: state.sources.length, note: "원문 소재" },
+      { label: "1차 후보", value: candidates.length, note: "9점 이상" },
+      { label: "우선 제작", value: priority.length, note: "12점 이상" },
+      { label: "검수 필요", value: pendingReview.length, note: "표현 확인" },
+    ]
+      .map(
+        (item) => `
+          <div>
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${item.value}</strong>
+            <small>${escapeHtml(item.note)}</small>
+          </div>
+        `,
+      )
+      .join("");
+
+    els.candidateList.innerHTML =
+      items.map(sourceCardHtml).join("") || `<div class="empty">조건에 맞는 후보가 없습니다.</div>`;
+    refreshIcons();
+  }
+
+  function sourceCardHtml(source) {
+    const scoreClass = source.score.total >= 12 ? "priority" : source.score.total >= 9 ? "candidate" : "low";
+    const categories = source.category?.length ? source.category : ["미분류"];
+    return `
+      <article class="source-item">
+        <div class="source-top">
+          <div class="source-title">
+            <strong>${escapeHtml(source.title)}</strong>
+            <span>${escapeHtml(source.source_name || source.source_type)} · ${escapeHtml(source.published_at || "-")}</span>
+          </div>
+          <span class="score-badge ${scoreClass}">${source.score.total}점</span>
+        </div>
+        <div class="pill-row">
+          ${categories.map((category) => `<span class="pill teal">${escapeHtml(category)}</span>`).join("")}
+          ${(source.keywords || []).slice(0, 6).map((keyword) => `<span class="pill">${escapeHtml(keyword)}</span>`).join("")}
+          ${source.needs_lawyer_review ? `<span class="pill red">검수 필요</span>` : ""}
+        </div>
+        <div class="source-summary">${escapeHtml(source.raw_summary || source.full_text || "")}</div>
+        <div class="source-actions">
+          <button class="mini-button" type="button" data-action="generate" data-id="${escapeHtml(source.id)}">
+            <i data-lucide="sparkles"></i><span>콘텐츠화</span>
+          </button>
+          <button class="mini-button" type="button" data-action="review" data-id="${escapeHtml(source.id)}">
+            <i data-lucide="shield-check"></i><span>${source.needs_lawyer_review ? "검수 해제" : "검수 요청"}</span>
+          </button>
+          <button class="mini-button danger" type="button" data-action="delete" data-id="${escapeHtml(source.id)}">
+            <i data-lucide="trash-2"></i><span>삭제</span>
+          </button>
+        </div>
+      </article>
+    `;
   }
 
   function renderFeeds() {

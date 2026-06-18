@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>황성준 변호사 채널 콘텐츠 워크벤치</title>
-    <link rel="stylesheet" href="./styles.css?v=20260617-auto" />
+    <link rel="stylesheet" href="./styles.css?v=20260618-pipeline" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-    <script defer src="./app.js?v=20260617-auto"></script>
+    <script defer src="./app.js?v=20260618-pipeline"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -21,24 +21,28 @@
 
         <nav class="nav-list">
           <button class="nav-item active" data-view="dashboard" type="button">
-            <i data-lucide="layout-dashboard"></i>
-            <span>대시보드</span>
+            <i data-lucide="panel-top"></i>
+            <span>운영 홈</span>
           </button>
           <button class="nav-item" data-view="sources" type="button">
-            <i data-lucide="rss"></i>
-            <span>원문·RSS</span>
+            <i data-lucide="radar"></i>
+            <span>1. 자동 수집</span>
+          </button>
+          <button class="nav-item" data-view="candidates" type="button">
+            <i data-lucide="list-checks"></i>
+            <span>2. 후보 선별</span>
           </button>
           <button class="nav-item" data-view="lawyer" type="button">
             <i data-lucide="file-pen-line"></i>
-            <span>원석 입력</span>
+            <span>3. 원석</span>
           </button>
           <button class="nav-item" data-view="output" type="button">
             <i data-lucide="sparkles"></i>
-            <span>콘텐츠화</span>
+            <span>4. 제작 패키지</span>
           </button>
           <button class="nav-item" data-view="guardrails" type="button">
             <i data-lucide="shield-check"></i>
-            <span>가드레일</span>
+            <span>리스크</span>
           </button>
         </nav>
 
@@ -55,8 +59,8 @@
       <main class="main">
         <header class="topbar">
           <div>
-            <p class="eyebrow" id="viewEyebrow">월간 운영</p>
-            <h1 id="viewTitle">콘텐츠 소재 대시보드</h1>
+            <p class="eyebrow" id="viewEyebrow">콘텐츠 파이프라인</p>
+            <h1 id="viewTitle">운영 홈</h1>
           </div>
           <div class="topbar-actions">
             <button class="icon-button" id="exportCsvBtn" type="button" title="후보 CSV 내보내기" aria-label="후보 CSV 내보내기">
@@ -75,7 +79,27 @@
           </div>
         </header>
 
-        <section class="view active" id="dashboardView" data-title="콘텐츠 소재 대시보드" data-eyebrow="월간 운영">
+        <section class="view active" id="dashboardView" data-title="운영 홈" data-eyebrow="콘텐츠 파이프라인">
+          <section class="workbench-hero">
+            <div>
+              <p class="eyebrow">다음 액션</p>
+              <h2 id="nextActionTitle">자동 수집부터 시작하세요</h2>
+              <p id="nextActionCopy">외부 이슈를 먼저 모은 뒤 점수가 높은 소재만 제작 패키지로 넘깁니다.</p>
+            </div>
+            <div class="hero-actions">
+              <button class="primary-button" id="goCollectBtn" type="button">
+                <i data-lucide="radar"></i>
+                <span>수집 시작</span>
+              </button>
+              <button class="ghost-button" id="goCandidatesBtn" type="button">
+                <i data-lucide="list-checks"></i>
+                <span>후보 보기</span>
+              </button>
+            </div>
+          </section>
+
+          <div class="pipeline-strip" id="pipelineStrip"></div>
+
           <div class="metric-grid">
             <article class="metric-card">
               <span>원문 수집</span>
@@ -143,76 +167,14 @@
           </section>
         </section>
 
-        <section class="view" id="sourcesView" data-title="원문·RSS 관리" data-eyebrow="수집과 필터링">
-          <div class="split-grid">
-            <section class="panel">
+        <section class="view" id="sourcesView" data-title="자동 수집" data-eyebrow="1단계">
+          <div class="collector-layout">
+            <section class="panel collector-main">
               <div class="panel-heading">
-                <h2>원문 등록</h2>
-              </div>
-              <form id="sourceForm" class="stack-form">
-                <div class="form-grid">
-                  <label>
-                    <span>출처 유형</span>
-                    <select name="source_type">
-                      <option value="news">뉴스</option>
-                      <option value="blog">블로그</option>
-                      <option value="community">커뮤니티</option>
-                      <option value="court">판례·공공</option>
-                      <option value="public">공공자료</option>
-                      <option value="lawyer_input">변호사 원석</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>출처명</span>
-                    <input name="source_name" placeholder="출처명" />
-                  </label>
+                <div>
+                  <h2>웹에서 소재 찾기</h2>
+                  <p class="panel-copy">뉴스, 블로그·웹, 커뮤니티, 판례·법률 검색 결과를 한 번에 수집합니다.</p>
                 </div>
-                <label>
-                  <span>원문 제목</span>
-                  <input name="title" required placeholder="원문 제목" />
-                </label>
-                <label>
-                  <span>원문 URL</span>
-                  <input name="url" placeholder="https://..." />
-                </label>
-                <div class="form-grid">
-                  <label>
-                    <span>발행일</span>
-                    <input name="published_at" type="date" />
-                  </label>
-                  <label>
-                    <span>리스크</span>
-                    <select name="risk_level">
-                      <option value="low">low</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
-                    </select>
-                  </label>
-                </div>
-                <label>
-                  <span>요약</span>
-                  <textarea name="raw_summary" rows="4" required placeholder="사건 장면, 관계, 돈·명의·계정·상표 쟁점"></textarea>
-                </label>
-                <label>
-                  <span>본문</span>
-                  <textarea name="full_text" rows="5" placeholder="가능하면 원문 본문"></textarea>
-                </label>
-                <div class="form-actions">
-                  <button class="primary-button" type="submit">
-                    <i data-lucide="plus"></i>
-                    <span>저장</span>
-                  </button>
-                  <button class="ghost-button" id="fillSampleBtn" type="button">
-                    <i data-lucide="wand-sparkles"></i>
-                    <span>예시</span>
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            <section class="panel">
-              <div class="panel-heading">
-                <h2>자동 웹 수집</h2>
                 <button class="primary-button" id="autoCollectBtn" type="button">
                   <i data-lucide="search"></i>
                   <span>자동 수집</span>
@@ -244,38 +206,119 @@
                   </label>
                   <label>
                     <span>검색 키워드</span>
-                    <textarea id="autoKeywordInput" rows="5"></textarea>
+                    <textarea id="autoKeywordInput" rows="8"></textarea>
                   </label>
                 </div>
                 <div class="collector-status" id="autoCollectStatus">대기 중</div>
               </div>
+            </section>
 
-              <div class="panel-heading lower-heading">
-                <h2>RSS URL</h2>
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>보조 입력</h2>
+                  <p class="panel-copy">자동 수집으로 놓친 사안만 직접 보강합니다.</p>
+                </div>
               </div>
-              <form id="feedForm" class="inline-form">
-                <input id="feedNameInput" placeholder="출처명" />
-                <input id="feedUrlInput" placeholder="RSS URL" />
-                <button class="icon-only" type="submit" title="RSS URL 추가" aria-label="RSS URL 추가">
-                  <i data-lucide="plus"></i>
-                </button>
-              </form>
-              <div class="feed-list" id="feedList"></div>
+              <div class="utility-tabs">
+                <span>수동 원문</span>
+                <span>RSS URL</span>
+                <span>일괄 분석</span>
+              </div>
+              <div class="panel-subsection">
+                <h3>수동 원문</h3>
+                <form id="sourceForm" class="stack-form">
+                  <div class="form-grid">
+                    <label>
+                      <span>출처 유형</span>
+                      <select name="source_type">
+                        <option value="news">뉴스</option>
+                        <option value="blog">블로그</option>
+                        <option value="community">커뮤니티</option>
+                        <option value="court">판례·공공</option>
+                        <option value="public">공공자료</option>
+                        <option value="lawyer_input">변호사 원석</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>출처명</span>
+                      <input name="source_name" placeholder="출처명" />
+                    </label>
+                  </div>
+                  <label>
+                    <span>원문 제목</span>
+                    <input name="title" required placeholder="원문 제목" />
+                  </label>
+                  <label>
+                    <span>원문 URL</span>
+                    <input name="url" placeholder="https://..." />
+                  </label>
+                  <div class="form-grid">
+                    <label>
+                      <span>발행일</span>
+                      <input name="published_at" type="date" />
+                    </label>
+                    <label>
+                      <span>리스크</span>
+                      <select name="risk_level">
+                        <option value="low">low</option>
+                        <option value="medium">medium</option>
+                        <option value="high">high</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label>
+                    <span>요약</span>
+                    <textarea name="raw_summary" rows="4" required placeholder="사건 장면, 관계, 돈·명의·계정·상표 쟁점"></textarea>
+                  </label>
+                  <label>
+                    <span>본문</span>
+                    <textarea name="full_text" rows="4" placeholder="가능하면 원문 본문"></textarea>
+                  </label>
+                  <div class="form-actions">
+                    <button class="primary-button" type="submit">
+                      <i data-lucide="plus"></i>
+                      <span>저장</span>
+                    </button>
+                    <button class="ghost-button" id="fillSampleBtn" type="button">
+                      <i data-lucide="wand-sparkles"></i>
+                      <span>예시</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
 
-              <div class="panel-heading lower-heading">
-                <h2>일괄 입력</h2>
-                <button class="ghost-button" id="parseFeedBtn" type="button">
-                  <i data-lucide="scan-text"></i>
-                  <span>분석</span>
-                </button>
+              <div class="panel-subsection">
+                <h3>RSS URL</h3>
+                <form id="feedForm" class="inline-form">
+                  <input id="feedNameInput" placeholder="출처명" />
+                  <input id="feedUrlInput" placeholder="RSS URL" />
+                  <button class="icon-only" type="submit" title="RSS URL 추가" aria-label="RSS URL 추가">
+                    <i data-lucide="plus"></i>
+                  </button>
+                </form>
+                <div class="feed-list" id="feedList"></div>
               </div>
-              <textarea id="feedPasteInput" class="bulk-box" rows="8" placeholder="RSS XML 또는 JSON"></textarea>
+
+              <div class="panel-subsection">
+                <div class="panel-heading compact-heading">
+                  <h3>일괄 분석</h3>
+                  <button class="ghost-button" id="parseFeedBtn" type="button">
+                    <i data-lucide="scan-text"></i>
+                    <span>분석</span>
+                  </button>
+                </div>
+                <textarea id="feedPasteInput" class="bulk-box" rows="6" placeholder="RSS XML 또는 JSON"></textarea>
+              </div>
             </section>
           </div>
 
           <section class="panel">
             <div class="panel-heading table-heading">
-              <h2>수집 원문</h2>
+              <div>
+                <h2>최근 수집 소재</h2>
+                <p class="panel-copy">여기서는 확인만 하고, 선별은 다음 단계에서 처리합니다.</p>
+              </div>
               <div class="filter-row">
                 <input id="sourceSearch" class="search-input" placeholder="검색" />
                 <select id="sourceStatusFilter">
@@ -284,9 +327,60 @@
                   <option value="priority">우선 제작</option>
                   <option value="review">검수 필요</option>
                 </select>
+                <button class="ghost-button" data-jump-view="candidates" type="button">
+                  <i data-lucide="arrow-right"></i>
+                  <span>선별로 이동</span>
+                </button>
               </div>
             </div>
             <div class="source-list" id="sourceList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="candidatesView" data-title="후보 선별" data-eyebrow="2단계">
+          <div class="triage-layout">
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>선별 기준</h2>
+                  <p class="panel-copy">총점 9점 이상은 1차 후보, 12점 이상은 우선 제작 후보입니다.</p>
+                </div>
+              </div>
+              <div class="triage-summary" id="candidateSummary"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>작업 순서</h2>
+                  <p class="panel-copy">점수 높은 소재를 검수 표시한 뒤 제작 패키지로 넘깁니다.</p>
+                </div>
+              </div>
+              <div class="step-list">
+                <span>1. 12점 이상 우선 확인</span>
+                <span>2. 위험 표현과 특정성 확인</span>
+                <span>3. 원석과 맞는 소재만 제작</span>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-heading table-heading">
+              <div>
+                <h2>소재 후보 큐</h2>
+                <p class="panel-copy">제작 가치가 있는 소재를 바로 콘텐츠 패키지로 넘깁니다.</p>
+              </div>
+              <div class="filter-row">
+                <input id="candidateSearch" class="search-input" placeholder="검색" />
+                <select id="candidateStageFilter">
+                  <option value="all">전체</option>
+                  <option value="candidate">1차 후보</option>
+                  <option value="priority">우선 제작</option>
+                  <option value="review">검수 필요</option>
+                </select>
+              </div>
+            </div>
+            <div class="source-list" id="candidateList"></div>
           </section>
         </section>
 
